@@ -8,4 +8,5 @@ setup(name='pymtattl',
       author_email='ritaotao28@gmail.com',
       license='MIT',
       packages=['pymtattl'],
+      install_requires=['bs4', 'pandas'],
       zip_safe=False)
