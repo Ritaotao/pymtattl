@@ -1,4 +1,10 @@
+import os
 from setuptools import setup
+
+
+def read(fname):
+    return open(os.path.join(os.path.dirname(__file__), fname)).read()
+
 
 setup(name='pymtattl',
       packages=['pymtattl'],
@@ -7,17 +13,19 @@ setup(name='pymtattl',
       author='Ritaotao',
       author_email='ritaotao28@gmail.com',
       description='Download and store MTA turnstile data',
-      url='http://github.com/Ritaotao/pymtattl',
+      long_description=read('README'),
+      url='https://github.com/Ritaotao/pymtattl',
+      download_url='https://github.com/Ritaotao/pymtattl/archive/0.1.tar.gz',
       install_requires=['bs4', 'pandas'],
       keywords=['mta', 'data'],
       classifiers=[
         'Programming Language :: Python :: 3',
-        'Topic :: Data',
+        'Development Status :: 2 - Pre-Alpha',
+        'Operating System :: Microsoft :: Windows',
+        'Topic :: Database',
         'Topic :: Utilities',
+        'Topic :: Education',
         'Intended Audience :: Developers',
-        'Intended Audience :: Education',
         'Intended Audience :: Science/Research',
-        'Operating System :: Windows',
-        'Topic :: Education'
         ]
       )
