@@ -28,11 +28,11 @@ class MTADownloader:
         self.end = end
         self.dat_dir = ''
 
-    def _get_urls(self, url=TURNSTILE_URL, keep_urls=False):
+    def _get_urls(self, keep_urls=False):
         """
         Get and save data urls
         """
-        soup = BeautifulSoup(urlopen(url), 'lxml')
+        soup = BeautifulSoup(urlopen(self.__class__.TURNSTILE_URL), 'lxml')
         urls = soup.findAll('a', href=True)
         # data file urls
         dat_urls = [self.__class__.MAIN_URL + u.get('href')
@@ -57,21 +57,21 @@ class MTADownloader:
         print("{} data files and {} resource files available for download."
               .format(len(dat_urls), len(res_urls)))
 
+        urls = dat_urls + res_urls
         if keep_urls:
             file_path = os.path.join(self.work_dir, 'data_urls.txt')
             with open(file_path, 'w+') as f:
-                f.write('\n'.join(dat_urls))
-                f.write('\n'.join(res_urls))
-        return dat_urls, res_urls
+                f.write('\n'.join(urls))
+        return urls
 
     def download_to_txt(self, data_folder='data'):
         """
         Download text files
         """
         dat_dir = createFolder(self.work_dir, data_folder)
-        dat_urls, res_urls = self._get_urls()
+        urls = self._get_urls()
         # url=self.__class__.TURNSTILE_URL
-        urls = dat_urls + res_urls
+
         i = 0
         for url in urls:
             fpath = os.path.join(dat_dir, url.split('/')[-1])
@@ -85,7 +85,7 @@ class MTADownloader:
                 i += 1
                 if i % 10 == 0:
                     print("Wrote {} files...".format(i))
-        print("Added {} text files to {}. (Current # of Files in Dir: {})"
+        print("Finish adding {} text files to {}. (# of Files in Dir: {})"
               .format(i, dat_dir, len(os.listdir(dat_dir))))
         self.dat_dir = dat_dir
         return dat_dir
@@ -122,21 +122,20 @@ class MTADownloader:
         Download data and store in a sqlite database
         """
         local = True
-        if data_path != '':
-            self.dat_dir = data_path
+        if data_path != '' and data_path is not None:
+            self.dat_dir = str(data_path)
         try:
-            data_urls = os.listdir(self.dat_dir)
+            urls = os.listdir(self.dat_dir)
         except Exception as e:
             print("Couldn't find local data folder.")
             txt = input("Download text files first? (Y/N)").lower()
             if txt == 'y':
                 self.download_to_txt()
-                data_urls = os.listdir(self.dat_dir)
+                urls = os.listdir(self.dat_dir)
             elif txt == 'n':
                 print("Download from urls, might take some time...")
-                dat_urls, res_urls = self._get_urls()
+                urls = self._get_urls()
                 # url=self.__class__.TURNSTILE_URL
-                data_urls = dat_urls + res_urls
                 local = False
             else:
                 print("Not valid input.")
@@ -150,7 +149,7 @@ class MTADownloader:
         exist_files = [i[0] for i in get_efiles]
 
         i = 0
-        for url in data_urls:
+        for url in urls:
             fname = url.split('/')[-1]
             if fname not in exist_files and fname.startswith('turnstile'):
                 if local:
@@ -185,8 +184,8 @@ class MTADownloader:
 
             if i > 0 and i % 5 == 0:
                 conn.commit()
-                print("Added {} files to the database...".format(i))
+                print("Adding {} files to the database...".format(i))
         conn.commit()
         conn.close()
-        print("Wrote {} files to the database.".format(i))
+        print("Finish writing {} files to the database.".format(i))
         return db_path

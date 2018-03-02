@@ -56,7 +56,7 @@ Parameters
 
 Get **urls** for data within date range and resource files (description, name key)
 
-    dat_urls, res_urls = mta_downloader._get_urls(keep_urls=True)
+    urls = mta_downloader._get_urls(keep_urls=True)
 
 * Set `keep_url = True` to save the returned urls in a text file *data_urls.txt*.
 
@@ -72,7 +72,7 @@ Download requested data as separate **text files**
 
 * `data_folder` *(optional)*: provide a custom folder name
 
-* Returns string of data folder directory
+* Returns data folder directory
 
 ### SQlite Database
 
@@ -85,11 +85,14 @@ Download, reformat, and store requested data in a **SQLite database**
   - **turnstile**: holds turnstile data
   - **name_keys**: a matching table to lookup station name given remote and booth
   - **file_names**: names of data files that are already in **turnstile** table
- 
-* If have already run `download_to_txt()`, will use text files within data folder directory (insatnce attribute)
 
-* `data_path`: can also specify a data folder directory to search for existing data text files
+* `data_path`:
 
-* If can not find local text files, ask if prefer to download text files first or directly store in the database (use with caution, could be very slow!)
+  - `''` | `None`: must run `download_to_txt()` first, then the function uses text files within data folder directory (instance attribute)
+  - Otherwise, specify a full data folder directory to search for existing data text files
+
+* If can not find local text files, choose to download text files first or directly store in the database (use with caution, could be very slow!)
+
+* Returns database directory
 
 More to come...

@@ -22,7 +22,7 @@ def createFolder(root='Current', branch=None):
     elif os.path.exists(root):
         work_dir = root
     else:
-        raise OSError('Error: Directory does not exist: {}.'.format(root))
+        raise OSError('Error: Directory does not exist: {}'.format(root))
 
     if branch is not None:
         work_dir = os.path.join(work_dir, str(branch))
@@ -31,7 +31,7 @@ def createFolder(root='Current', branch=None):
                 os.mkdir(work_dir)
                 print("Created folder {}.".format(work_dir))
             except OSError as err:
-                raise OSError('Error: Failed to create dir {}: {}.'
+                raise OSError('Error: Failed to create dir {}: {}'
                               .format(work_dir, err))
     return work_dir
 
