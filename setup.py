@@ -16,8 +16,8 @@ setup(name='pymtattl',
       long_description=read('README.md'),
       url='https://github.com/Ritaotao/pymtattl',
       download_url='https://github.com/Ritaotao/pymtattl/archive/0.1.tar.gz',
-      install_requires=['bs4', 'pandas'],
-      keywords=['mta', 'data'],
+      install_requires=['beautifulsoup4', 'pandas'],
+      keywords=['mta', 'data', 'traffic'],
       classifiers=[
         'Programming Language :: Python :: 3',
         'Development Status :: 2 - Pre-Alpha',
@@ -25,7 +25,5 @@ setup(name='pymtattl',
         'Topic :: Database',
         'Topic :: Utilities',
         'Topic :: Education',
-        'Intended Audience :: Developers',
-        'Intended Audience :: Science/Research',
         ]
       )
