@@ -8,14 +8,14 @@ def read(fname):
 
 setup(name='pymtattl',
       packages=['pymtattl'],
-      version='0.1',
+      version='0.1.2',
       license='MIT',
       author='Ritaotao',
       author_email='ritaotao28@gmail.com',
       description='Download and store MTA turnstile data',
       long_description=read('README.md'),
       url='https://github.com/Ritaotao/pymtattl',
-      download_url='https://github.com/Ritaotao/pymtattl/archive/0.1.tar.gz',
+      download_url='https://github.com/Ritaotao/pymtattl/archive/0.1.2.tar.gz',
       install_requires=['beautifulsoup4', 'pandas'],
       keywords=['mta', 'data', 'traffic'],
       classifiers=[
