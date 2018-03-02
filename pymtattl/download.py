@@ -17,7 +17,7 @@ class MTADownloader:
     TURNSTILE_URL = 'http://web.mta.info/developers/turnstile.html'
 
     def __init__(self, work_dir='Current',
-                 start=141018, end=None):
+                 start=None, end=None):
         # define a valid folder for download data
         self.work_dir = createFolder(work_dir, branch=None)
         assert (start is None or type(start) == int), \
@@ -189,4 +189,4 @@ class MTADownloader:
         conn.commit()
         conn.close()
         print("Wrote {} files to the database.".format(i))
-        return
+        return db_path
