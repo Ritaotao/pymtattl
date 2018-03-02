@@ -1,12 +1,23 @@
 from setuptools import setup
 
 setup(name='pymtattl',
+      packages=['pymtattl'],
       version='0.1',
-      description='Download and store MTA turnstile data',
-      url='http://github.com/',
+      license='MIT',
       author='Ritaotao',
       author_email='ritaotao28@gmail.com',
-      license='MIT',
-      packages=['pymtattl'],
+      description='Download and store MTA turnstile data',
+      url='http://github.com/Ritaotao/pymtattl',
       install_requires=['bs4', 'pandas'],
-      zip_safe=False)
+      keywords=['mta', 'data'],
+      classifiers=[
+        'Programming Language :: Python :: 3',
+        'Topic :: Data',
+        'Topic :: Utilities',
+        'Intended Audience :: Developers',
+        'Intended Audience :: Education',
+        'Intended Audience :: Science/Research',
+        'Operating System :: Windows',
+        'Topic :: Education'
+        ]
+      )
