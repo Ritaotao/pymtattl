@@ -21,6 +21,10 @@ MTA Turnstile Data: http://web.mta.info/developers/turnstile.html
 
   * [SQlite Database](#sqlite-database)
 
+* [Caveats](#caveats)
+
+* [To-Do](#to-do)
+
 ## Installation
 
     pip install pymtattl
@@ -56,7 +60,7 @@ Parameters
 
 Get **urls** for data within date range and resource files (description, name key)
 
-    urls = mta_downloader._get_urls(keep_urls=True)
+    urls = mta_downloader.get_urls(keep_urls=True)
 
 * Set `keep_url = True` to save the returned urls in a text file *data_urls.txt*.
 
@@ -76,7 +80,7 @@ Download requested data as separate **text files**
 
 ### SQlite Database
 
-Download, reformat, and store requested data in a **SQLite database**
+Reformat **All** local data or download **requested** data and store in a **SQLite database**
 
     db_path = mta_downloader.download_to_db()
 
@@ -95,4 +99,17 @@ Download, reformat, and store requested data in a **SQLite database**
 
 * Returns database directory
 
-More to come...
+## Caveats
+
+* Some know data issues and these rows will be skipped while building the database
+
+  - In Turnstile_120428.txt, one line with empty ('') exit number
+  - In Turnstile_120714.txt, first few lines could not be parsed
+
+## To-Do
+
+* De-cumulate entry and exit numbers, and store data within selected date range into a new table
+
+* A Summary table (ie. number of booth per station, average daily station entries/exits, ...) for "cleaned" data table above
+
+* More to come...

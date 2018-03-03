@@ -4,7 +4,7 @@ import os
 from urllib.request import urlopen
 from urllib.error import HTTPError
 from bs4 import BeautifulSoup
-from pymtattl.utils import createFolder, writeDB, getPubDate
+from .utils import createFolder, writeDB, getPubDate
 import sqlite3
 import pandas as pd
 
@@ -28,7 +28,7 @@ class MTADownloader:
         self.end = end
         self.dat_dir = ''
 
-    def _get_urls(self, keep_urls=False):
+    def get_urls(self, keep_urls=False):
         """
         Get and save data urls
         """
@@ -69,8 +69,7 @@ class MTADownloader:
         Download text files
         """
         dat_dir = createFolder(self.work_dir, data_folder)
-        urls = self._get_urls()
-        # url=self.__class__.TURNSTILE_URL
+        urls = self.get_urls()
 
         i = 0
         for url in urls:
@@ -134,8 +133,7 @@ class MTADownloader:
                 urls = os.listdir(self.dat_dir)
             elif txt == 'n':
                 print("Download from urls, might take some time...")
-                urls = self._get_urls()
-                # url=self.__class__.TURNSTILE_URL
+                urls = self.get_urls()
                 local = False
             else:
                 print("Not valid input.")

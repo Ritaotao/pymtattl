@@ -9,6 +9,13 @@ def getPubDate(fname):
     return int(fname.split('_')[1].split('.')[0])
 
 
+def formatDate(val):
+    """
+    String '%m-%d-%y' to string'%Y-%m-%d'
+    """
+    return datetime.strptime(val, '%m-%d-%y').strftime('%Y-%m-%d')
+
+
 def createFolder(root='Current', branch=None):
     """
     Create new folder under given directory,
@@ -53,23 +60,30 @@ def writeDB(filename, data, c):
                 keys, vals = cols[:3], cols[3:]
                 # keys: ca/units/scp
                 # + every 5: daten/timen/descn, entriesn/exitsn
+                rows = []
                 for i in range(0, len(vals), 5):
-                    rows = [tuple(keys
-                                  + [datetime.strptime(vals[i], '%m-%d-%y')
-                                     .strftime('%Y-%m-%d')]
-                                  + vals[(i+1):(i+3)]
-                                  + [int(j) for j in vals[(i+3):(i+5)]])]
-                c.executemany('INSERT INTO turnstiles VALUES '
-                              '(?,?,?,?,?,?,?,?)', rows)
+                    try:
+                        row = tuple(keys
+                                    + [formatDate(vals[i])]
+                                    + vals[(i+1):(i+3)]
+                                    + [int(j) for j in vals[(i+3):(i+5)]])
+                        rows.append(row)
+                    except ValueError as e:
+                        continue
+                if rows:
+                    c.executemany('INSERT INTO turnstiles VALUES '
+                                  '(?,?,?,?,?,?,?,?)', rows)
     else:
         for line in data[1:]:
             cols = line.strip().split(',')
             if len(cols) == 11:
-                row = tuple(cols[:3]
-                            + [datetime.strptime(cols[6], '%m/%d/%Y')
-                               .strftime('%Y-%m-%d')]
-                            + cols[7:9]
-                            + [int(i) for i in cols[9:11]])
-                c.execute('INSERT INTO turnstiles VALUES '
-                          '(?,?,?,?,?,?,?,?)', row)
+                try:
+                    row = tuple(cols[:3]
+                                + [formatDate(cols[6])]
+                                + cols[7:9]
+                                + [int(i) for i in cols[9:11]])
+                    c.execute('INSERT INTO turnstiles VALUES '
+                              '(?,?,?,?,?,?,?,?)', row)
+                except ValueError as e:
+                    continue
     return c
