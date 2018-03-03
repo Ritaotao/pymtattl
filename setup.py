@@ -8,7 +8,7 @@ def read(fname):
 
 setup(name='pymtattl',
       packages=['pymtattl'],
-      version='0.1.2',
+      version='0.1.3',
       license='MIT',
       author='Ritaotao',
       author_email='ritaotao28@gmail.com',
