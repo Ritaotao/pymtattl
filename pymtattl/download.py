@@ -4,12 +4,14 @@ import os
 from urllib.request import urlopen
 from urllib.error import HTTPError
 from bs4 import BeautifulSoup
-from .utils import createFolder, writeDB, getPubDate
+from .utils import createFolder, writeDB, getPubDate, ifEmpty
 import sqlite3
 import pandas as pd
+import psycopg2
+from psycopg2.extensions import ISOLATION_LEVEL_AUTOCOMMIT
 
 
-class MTADownloader:
+class BaseDownloader:
     """
     Download mta turnstile data page
     """
@@ -89,12 +91,61 @@ class MTADownloader:
         self.dat_dir = dat_dir
         return dat_dir
 
-    def init_db(self):
+
+class DBDownloader(BaseDownloader):
+    """
+    Downlaod and data and furthermore, save to database
+    """
+
+    def __init__(self, work_dir, start=None, end=None, dbtype='sqlite'):
+        super().__init__(work_dir, start, end)
+        self.dbtype = dbtype
+        self.host = ''
+        self.dbname = ''
+        self.user = ''
+        self.password = ''
+
+    def auth_db(self, host='', dbname='', user='', password=''):
+        if self.dbtype == 'sqlite':
+            self.dbname = ifEmpty(dbname, 'Please use a valid database name.')
+        elif self.dbtype == 'postgres':
+            self.host = ifEmpty(dbname, 'Please use a valid host.')
+            self.dbname = ifEmpty(dbname, 'Please use a valid database name.')
+            self.user = ifEmpty(dbname, 'Please use a valid user name.')
+            self.password = ifEmpty(dbname, 'Please use a valid password.')
+        return
+
+    def create_sqlitedb(self):
+        dbpath = self.work_dir+self.dbname
+        try:
+            conn = sqlite3.connect(dbpath)
+            conn.close()
+        except Exception as e:
+            print(e)
+            raise
+        return dbpath
+
+    def create_posgresdb(self):
+        try:
+            conn = psycopg2.connect(dbname='postgres', user=self.user,
+                                    host=self.host, password=self.password)
+            conn.set_isolation_level(ISOLATION_LEVEL_AUTOCOMMIT)
+            cur = conn.curor()
+            cur.execute('CREATE DATABASE %s ;' % self.dbname)
+            cur.close()
+            con.close()
+        except Exception as e:
+            print(e)
+            raise
+        return
+
+    def init_db(self, dbtype):
         """
         Create database or update missing tables if missing
         """
-        db_path = os.path.join(self.work_dir, 'data.db')
+        #db_path = os.path.join(self.work_dir, 'data.db')
         new = False
+        if dbtype == 'sqlite':
         if not os.path.exists(db_path):
             new = True
         try:

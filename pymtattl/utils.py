@@ -16,6 +16,16 @@ def formatDate(val):
     return datetime.strptime(val, '%m-%d-%y').strftime('%Y-%m-%d')
 
 
+def ifEmpty(target, error_message):
+    """
+    Check whether a target is an empty string
+    """
+    if target == '':
+        raise ValueError(error_message)
+    else:
+        return target
+
+
 def createFolder(root='Current', branch=None):
     """
     Create new folder under given directory,
