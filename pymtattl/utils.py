@@ -16,14 +16,18 @@ def formatDate(val):
     return datetime.strptime(val, '%m-%d-%y').strftime('%Y-%m-%d')
 
 
-def ifEmpty(target, error_message):
+def notEmptyStr(var):
     """
-    Check whether a target is an empty string
+    Check whether a variable is a non-empty string
     """
-    if target == '':
-        raise ValueError(error_message)
+    return bool(isinstance(var, str) and var.strip() != '')
+
+
+def ifEmptyStr(var, error_message):
+    if notEmptyStr(var):
+        return var
     else:
-        return target
+        raise ValueError(error_message)
 
 
 def createFolder(root='Current', branch=None):

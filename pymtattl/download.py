@@ -4,7 +4,7 @@ import os
 from urllib.request import urlopen
 from urllib.error import HTTPError
 from bs4 import BeautifulSoup
-from .utils import createFolder, writeDB, getPubDate, ifEmpty
+from .utils import createFolder, writeDB, getPubDate, notEmptyStr, ifEmptyStr
 import sqlite3
 import pandas as pd
 import psycopg2
@@ -100,23 +100,29 @@ class DBDownloader(BaseDownloader):
     def __init__(self, work_dir, start=None, end=None, dbtype='sqlite'):
         super().__init__(work_dir, start, end)
         self.dbtype = dbtype
-        self.host = ''
         self.dbname = ''
-        self.user = ''
-        self.password = ''
+        self.dbparms = ''
 
-    def auth_db(self, host='', dbname='', user='', password=''):
+    def auth_db(self, dbname='', user='', password='', host='', port=''):
         if self.dbtype == 'sqlite':
-            self.dbname = ifEmpty(dbname, 'Please use a valid database name.')
+            self.dbname = ifEmptyStr(dbname, 'Please use a valid db name.')
         elif self.dbtype == 'postgres':
-            self.host = ifEmpty(dbname, 'Please use a valid host.')
-            self.dbname = ifEmpty(dbname, 'Please use a valid database name.')
-            self.user = ifEmpty(dbname, 'Please use a valid user name.')
-            self.password = ifEmpty(dbname, 'Please use a valid password.')
+            self.dbname = ifEmptyStr(dbname, 'Please use a valid db name.')
+            user = ifEmptyStr(user, 'Please use a valid user name.')
+            password = ifEmptyStr(password, 'Please use a valid password.')
+            conn_string = "{}={} {}={}".format("user", user,
+                                               "password", password)
+            if notEmptyStr(host):
+                conn_string += " {}={}".format("host", host)
+            if notEmptyStr(port):
+                conn_string += " {}={}".format("port", port)
+            self.dbparms = conn_string
         return
 
     def create_sqlitedb(self):
         dbpath = self.work_dir+self.dbname
+        if os.path.exists(dbpath):
+            print("DB {} already exists.".format(self.dbname))
         try:
             conn = sqlite3.connect(dbpath)
             conn.close()
@@ -127,11 +133,16 @@ class DBDownloader(BaseDownloader):
 
     def create_posgresdb(self):
         try:
-            conn = psycopg2.connect(dbname='postgres', user=self.user,
-                                    host=self.host, password=self.password)
+            conn_string = self.dbparms + " dbname=postgre"
+            conn = psycopg2.connect(dsn=conn_string)
             conn.set_isolation_level(ISOLATION_LEVEL_AUTOCOMMIT)
             cur = conn.curor()
-            cur.execute('CREATE DATABASE %s ;' % self.dbname)
+            cur.execute("SELECT 1 FROM pg_catalog.pg_database "
+                        "WHERE datname='{}'".format(self.dbname))
+            if cur.fetchone()[0]:
+                print("DB {} already exists.".format(self.dbname))
+            else:
+                cur.execute('CREATE DATABASE %s ;' % self.dbname)
             cur.close()
             con.close()
         except Exception as e:
