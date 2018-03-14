@@ -4,7 +4,7 @@ import os
 from urllib.request import urlopen
 from urllib.error import HTTPError
 from bs4 import BeautifulSoup
-from .utils import createFolder, writeDB, getPubDate, notEmptyStr, ifEmptyStr
+from utils import createFolder, writeDB, getPubDate, notEmptyStr
 import sqlite3
 import pandas as pd
 import psycopg2
@@ -22,13 +22,12 @@ class BaseDownloader:
                  start=None, end=None):
         # define a valid folder for download data
         self.work_dir = createFolder(work_dir, branch=None)
-        assert (start is None or type(start) == int), \
+        assert (start is None or isinstance(start, int)), \
             'Start should be None or 6-digit integer (yymmdd)'
-        assert (end is None or type(end) == int), \
+        assert (end is None or isinstance(end, int)), \
             'End should be None or 6-digit integer (yymmdd)'
         self.start = start
         self.end = end
-        self.dat_dir = ''
 
     def get_urls(self, keep_urls=False):
         """
@@ -64,6 +63,7 @@ class BaseDownloader:
             file_path = os.path.join(self.work_dir, 'data_urls.txt')
             with open(file_path, 'w+') as f:
                 f.write('\n'.join(urls))
+            print("Write data_urls.txt to {}".format(self.work_dir))
         return urls
 
     def download_to_txt(self, data_folder='data'):
@@ -88,82 +88,48 @@ class BaseDownloader:
                     print("Wrote {} files...".format(i))
         print("Finish adding {} text files to {}. (# of Files in Dir: {})"
               .format(i, dat_dir, len(os.listdir(dat_dir))))
-        self.dat_dir = dat_dir
         return dat_dir
 
 
-class DBDownloader(BaseDownloader):
+class SQLiteDownloader(BaseDownloader):
     """
     Downlaod and data and furthermore, save to database
     """
 
-    def __init__(self, work_dir, start=None, end=None, dbtype='sqlite'):
+    def __init__(self, work_dir='Current', start=None, end=None,
+                 dbname='data.db'):
         super().__init__(work_dir, start, end)
-        self.dbtype = dbtype
-        self.dbname = ''
-        self.dbparms = ''
+        self.dbname = dbname
+        self.dbpath = ''
 
-    def auth_db(self, dbname='', user='', password='', host='', port=''):
-        if self.dbtype == 'sqlite':
-            self.dbname = ifEmptyStr(dbname, 'Please use a valid db name.')
-        elif self.dbtype == 'postgres':
-            self.dbname = ifEmptyStr(dbname, 'Please use a valid db name.')
-            user = ifEmptyStr(user, 'Please use a valid user name.')
-            password = ifEmptyStr(password, 'Please use a valid password.')
-            conn_string = "{}={} {}={}".format("user", user,
-                                               "password", password)
-            if notEmptyStr(host):
-                conn_string += " {}={}".format("host", host)
-            if notEmptyStr(port):
-                conn_string += " {}={}".format("port", port)
-            self.dbparms = conn_string
+    def auth_db(self):
+        assert notEmptyStr(self.dbname), 'Please use a valid db name.'
+        if self.dbname.split('.')[-1] != 'db':
+            self.dbname += '.db'
+        self.dbpath = os.path.join(self.work_dir, self.dbname)
         return
 
-    def create_sqlitedb(self):
-        dbpath = self.work_dir+self.dbname
-        if os.path.exists(dbpath):
-            print("DB {} already exists.".format(self.dbname))
+    def init_db(self):
+        """
+        Test connection and create db if not exists
+        """
+        self.auth_db()
+        if os.path.exists(self.dbpath):
+            print('Database file {} already exists. '
+                  'Update instead of create.'.format(self.dbname))
         try:
-            conn = sqlite3.connect(dbpath)
+            conn = sqlite3.connect(self.dbpath)
             conn.close()
         except Exception as e:
             print(e)
             raise
-        return dbpath
-
-    def create_posgresdb(self):
-        try:
-            conn_string = self.dbparms + " dbname=postgre"
-            conn = psycopg2.connect(dsn=conn_string)
-            conn.set_isolation_level(ISOLATION_LEVEL_AUTOCOMMIT)
-            cur = conn.curor()
-            cur.execute("SELECT 1 FROM pg_catalog.pg_database "
-                        "WHERE datname='{}'".format(self.dbname))
-            if cur.fetchone()[0]:
-                print("DB {} already exists.".format(self.dbname))
-            else:
-                cur.execute('CREATE DATABASE %s ;' % self.dbname)
-            cur.close()
-            con.close()
-        except Exception as e:
-            print(e)
-            raise
         return
 
-    def init_db(self, dbtype):
+    def init_tables(self):
         """
-        Create database or update missing tables if missing
+        Create or update tables if missing
         """
-        #db_path = os.path.join(self.work_dir, 'data.db')
-        new = False
-        if dbtype == 'sqlite':
-        if not os.path.exists(db_path):
-            new = True
-        try:
-            conn = sqlite3.connect(db_path)
-        except Exception as e:
-            print(e)
-            raise
+        conn = sqlite3.connect(self.dbpath)
         c = conn.cursor()
         c.execute('CREATE TABLE IF NOT EXISTS turnstiles '
                   '(booth text, remote text, scp text, date text, time text, '
@@ -174,35 +140,36 @@ class DBDownloader(BaseDownloader):
         c.execute('CREATE TABLE IF NOT EXISTS file_names (file text)')
         conn.commit()
         conn.close()
-        if new:
-            print('Created: {}.'.format(db_path))
-        return db_path
+        print('Created <turnstiles>, <name-keys>, <file_names> tables '
+              'if not exist.')
+        return
 
     def download_to_db(self, data_path=''):
         """
         Download data and store in a sqlite database
         """
         local = True
-        if data_path != '' and data_path is not None:
-            self.dat_dir = str(data_path)
         try:
-            urls = os.listdir(self.dat_dir)
-        except Exception as e:
+            urls = os.listdir(data_path)
+            assert sum(['turnstile' in u for u in urls]) > 1
+        except FileNotFoundError as e:
             print("Couldn't find local data folder.")
-            txt = input("Download text files first? (Y/N)").lower()
+            txt = input("Download text files first? (y/n)").lower()
             if txt == 'y':
-                self.download_to_txt()
-                urls = os.listdir(self.dat_dir)
+                folder = input("Input data folder name:").lower()
+                data_path = super().download_to_txt(data_folder=folder)
+                urls = os.listdir(data_path)
             elif txt == 'n':
                 print("Download from urls, might take some time...")
-                urls = self.get_urls()
+                urls = super().get_urls()
                 local = False
             else:
                 print("Not valid input.")
                 return
 
-        db_path = self.init_db()
-        conn = sqlite3.connect(db_path)
+        self.init_db()
+        self.init_tables()
+        conn = sqlite3.connect(self.dbpath)
         c = conn.cursor()
 
         get_efiles = c.execute('SELECT file FROM file_names').fetchall()
@@ -213,7 +180,7 @@ class DBDownloader(BaseDownloader):
             fname = url.split('/')[-1]
             if fname not in exist_files and fname.startswith('turnstile'):
                 if local:
-                    with open(os.path.join(self.dat_dir, url), 'r') as f:
+                    with open(os.path.join(data_path, url), 'r') as f:
                         data = f.read().split('\n')
                 else:
                     data = urlopen(url).read().decode('utf-8').split('\n')
@@ -228,7 +195,7 @@ class DBDownloader(BaseDownloader):
 
             elif fname not in exist_files and fname.endswith('xls'):
                 if local:
-                    url = os.path.join(self.dat_dir, url)
+                    url = os.path.join(data_path, url)
                 try:
                     res_data = pd.read_excel(url, header=0)
                     res_data.columns = ['remote', 'booth', 'station',
@@ -248,4 +215,48 @@ class DBDownloader(BaseDownloader):
         conn.commit()
         conn.close()
         print("Finish writing {} files to the database.".format(i))
-        return db_path
+        return self.dbpath
+
+
+class PostgresDownloader(BaseDownloader):
+    """
+    Downlaod and data and furthermore, save to database
+    """
+
+    def __init__(self, work_dir, start=None, end=None, dbtype='sqlite'):
+        super().__init__(work_dir, start, end)
+        self.dbtype = dbtype
+        self.dbname = ''
+        self.dbparms = ''
+
+    def auth_db(self, dbname='', user='', password='', host='', port=''):
+        self.dbname = ifEmptyStr(dbname, 'Please use a valid db name.')
+        user = ifEmptyStr(user, 'Please use a valid user name.')
+        password = ifEmptyStr(password, 'Please use a valid password.')
+        conn_string = "{}={} {}={}".format("user", user,
+                                           "password", password)
+        if notEmptyStr(host):
+            conn_string += " {}={}".format("host", host)
+        if notEmptyStr(port):
+            conn_string += " {}={}".format("port", port)
+        self.dbparms = conn_string
+        return
+
+    def create_posgresdb(self):
+        try:
+            conn_string = self.dbparms + " dbname=postgre"
+            conn = psycopg2.connect(dsn=conn_string)
+            conn.set_isolation_level(ISOLATION_LEVEL_AUTOCOMMIT)
+            cur = conn.curor()
+            cur.execute("SELECT 1 FROM pg_catalog.pg_database "
+                        "WHERE datname='{}'".format(self.dbname))
+            if cur.fetchone()[0]:
+                print("DB {} already exists.".format(self.dbname))
+            else:
+                cur.execute('CREATE DATABASE %s ;' % self.dbname)
+            cur.close()
+            con.close()
+        except Exception as e:
+            print(e)
+            raise
+        return

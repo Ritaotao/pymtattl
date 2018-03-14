@@ -1,1 +1,1 @@
-from .download import MTADownloader
+from .download import BaseDownloader

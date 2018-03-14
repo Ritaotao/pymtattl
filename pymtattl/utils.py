@@ -23,13 +23,6 @@ def notEmptyStr(var):
     return bool(isinstance(var, str) and var.strip() != '')
 
 
-def ifEmptyStr(var, error_message):
-    if notEmptyStr(var):
-        return var
-    else:
-        raise ValueError(error_message)
-
-
 def createFolder(root='Current', branch=None):
     """
     Create new folder under given directory,
@@ -40,20 +33,30 @@ def createFolder(root='Current', branch=None):
     """
     if root == 'Current':
         work_dir = os.getcwd()
-    elif os.path.exists(root):
+    elif os.path.isdir(root):
         work_dir = root
     else:
-        raise OSError('Error: Directory does not exist: {}'.format(root))
+        print("Couldn't find directory: ", root)
+        work_dir = os.getcwd()
+        create = input("Create folder under <{}>?(y/n)"
+                       .format(work_dir)).lower()
+        if create == 'y':
+            folder_name = input("Please enter folder name:")
+            return createFolder(root='Current', branch=folder_name)
+        else:
+            raise OSError('Error: Directory does not exist: {}'.format(root))
 
     if branch is not None:
         work_dir = os.path.join(work_dir, str(branch))
-        if not os.path.exists(work_dir):
+        if not os.path.isdir(work_dir):
             try:
                 os.mkdir(work_dir)
                 print("Created folder {}.".format(work_dir))
             except OSError as err:
                 raise OSError('Error: Failed to create dir {}: {}'
                               .format(work_dir, err))
+        else:
+            print("{} alreayd exists.".format(work_dir))
     return work_dir
 
 
