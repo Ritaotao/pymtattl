@@ -1,6 +1,6 @@
 import os
 import shutil
-from download import BaseDownloader, SQLiteDownloader
+from download import DBDownloader
 """
 base_downloader = BaseDownloader(work_dir='test',
                                  start=141011, end=141025)
@@ -20,7 +20,8 @@ print("Test is done. Cleaning up...")
 
 shutil.rmtree(base_downloader.work_dir, ignore_errors=False, onerror=None)
 """
-sqlite_downloader = SQLiteDownloader(work_dir='test',
-                                     start=141011, end=141025,
-                                     dbname='test.db')
-sqlite_downloader.download_to_db('test/test')
+db_parms = {'dbname':'test'}
+sqlite_downloader = DBDownloader(work_dir='test',
+                                 start=141011, end=141025, dbtype='sqlite', dbparms=db_parms)
+print(sqlite_downloader.work_dir)
+sqlite_downloader.download_to_db('test')
