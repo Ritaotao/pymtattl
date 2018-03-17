@@ -18,8 +18,7 @@ class BaseDownloader:
     MAIN_URL = 'http://web.mta.info/developers/'
     TURNSTILE_URL = 'http://web.mta.info/developers/turnstile.html'
 
-    def __init__(self, work_dir='Current',
-                 start=None, end=None):
+    def __init__(self, work_dir, start=None, end=None):
         # define a valid folder for download data
         self.work_dir = createFolder(work_dir, branch=None)
         assert (start is None or isinstance(start, int)), \
@@ -96,7 +95,7 @@ class DBDownloader(BaseDownloader):
     Downlaod data and furthermore, save to SQLite database
     """
 
-    def __init__(self, work_dir='Current', start=None, end=None,
+    def __init__(self, work_dir, start=None, end=None,
                  dbtype='sqlite', dbparms={}):
         super().__init__(work_dir, start, end)
         assert dbtype == 'sqlite' or dbtype == 'postgres'
@@ -108,17 +107,21 @@ class DBDownloader(BaseDownloader):
         self.data_path = ''
 
     def auth_db(self, dbparms):
-        if 'dbname' not in dbparms.keys() or notEmptyStr(dbparms['dbname']):
-            create = input("No dbname provided. Do you want to create a new db? (y/n)").lower()
+        if not('dbname' in dbparms.keys() and notEmptyStr(dbparms['dbname'])):
+            create = input("No dbname provided. "
+                           "Do you want to create a new db? (y/n)").lower()
             if create == 'y':
-                dbparms['dbname'] = input("Please enter a valid dbname:").lower()
+                dbparms['dbname'] = input("Please enter a valid dbname:")
                 self.new = True
             else:
                 raise ValueError("<dbname> required.")
         if self.dbtype == 'postgres':
-            assert 'user' in dbparms.keys(), "<user> required in postgres parameters."
-            assert 'password' in dbparms.keys(), "<password> required in postgres parameters."
-            assert 'host' in dbparms.keys(), "<host> required in postgres parameters."
+            assert 'user' in dbparms.keys(), ("<user> required "
+                                              "in postgres parameters.")
+            assert 'password' in dbparms.keys(), ("<password> required "
+                                                  "in postgres parameters.")
+            assert 'host' in dbparms.keys(), ("<host> required "
+                                              "in postgres parameters.")
         # update parameters
         self.dbparms = dbparms
         return
@@ -131,7 +134,8 @@ class DBDownloader(BaseDownloader):
             self.conn_string = os.path.join(self.work_dir, dbname)
         elif self.dbtype == 'postgres':
             if self.new:
-                pre_Parms = {k: self.dbparms[k] for k in self.dbparms.keys() and k != 'dbname'}
+                pre_Parms = {k: self.dbparms[k] for k
+                             in self.dbparms.keys() and k != 'dbname'}
                 self.conn_string = strParms(pre_Parms) + " dbname=postgres"
             else:
                 self.conn_string = strParms(self.dbparms)
@@ -155,13 +159,14 @@ class DBDownloader(BaseDownloader):
                 print('Database {} exists.'.format(dbname))
             else:
                 self.new = True
+            print(self.conn_string)
         try:
             con = self.conn_db()
             if self.dbtype == 'postgres':
                 con.set_isolation_level(ISOLATION_LEVEL_AUTOCOMMIT)
                 c = con.curor()
                 c.execute("SELECT 1 FROM pg_catalog.pg_database "
-                            "WHERE datname='{}'".format(dbname))
+                          "WHERE datname='{}'".format(dbname))
                 if c.fetchone()[0]:
                     print("Database {} exists.".format(dbname))
                 elif self.new:
@@ -169,14 +174,12 @@ class DBDownloader(BaseDownloader):
                     self.conn_string = strParms(self.dbparms)
                     print("Created Database {}.".format(dbname))
                 else:
-                    raise ValueError("Database {} does NOT exist.".format(dbname))
+                    raise ValueError("Database {} does NOT exist."
+                                     .format(dbname))
+            con.close()
         except Exception as e:
             print(e)
             raise
-        finally:
-            if con:
-                con.close()
-        return
 
     def init_tables(self):
         """
@@ -207,7 +210,8 @@ class DBDownloader(BaseDownloader):
                 print("There is no turnstile data in the directory.")
         else:
             print("Couldn't find {}.".format(data_path))
-        txt = input("Download text files first? If not will not keep a copy of text files. (y/n)").lower()
+        txt = input("Download text files first? "
+                    "If not will not keep a copy of text files. (y/n)").lower()
         if txt == 'y':
             if not notEmptyStr(folder):
                 folder = input("Input data folder name:").lower()
@@ -252,12 +256,10 @@ class DBDownloader(BaseDownloader):
                     c.execute('INSERT INTO file_names VALUES (?)', (fname,))
                     i += 1
                 except Exception as e:
-                    print(e)
-                    raise
-                finally:
                     if con:
                         con.close()
-
+                    print(e)
+                    raise
 
             elif fname not in exist_files and fname.endswith('xls'):
                 if self.local:
@@ -271,12 +273,10 @@ class DBDownloader(BaseDownloader):
                     c.execute('INSERT INTO file_names VALUES (?)', (fname,))
                     i += 1
                 except Exception as e:
-                    print(e)
-                    raise
-                finally:
                     if con:
                         con.close()
-
+                    print(e)
+                    raise
 
             if i > 0 and i % 5 == 0:
                 con.commit()

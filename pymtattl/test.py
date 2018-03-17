@@ -1,6 +1,8 @@
 import os
 import shutil
-from download import DBDownloader
+from unittest import TestCase
+from unittest.mock import patch
+from download import BaseDownloader, DBDownloader
 """
 base_downloader = BaseDownloader(work_dir='test',
                                  start=141011, end=141025)
@@ -20,8 +22,22 @@ print("Test is done. Cleaning up...")
 
 shutil.rmtree(base_downloader.work_dir, ignore_errors=False, onerror=None)
 """
-db_parms = {'dbname':'test'}
-sqlite_downloader = DBDownloader(work_dir='test',
-                                 start=141011, end=141025, dbtype='sqlite', dbparms=db_parms)
-print(sqlite_downloader.work_dir)
-sqlite_downloader.download_to_db('test')
+
+
+class DBDownloaderSqliteTest(TestCase):
+
+    def setUp(self):
+        self.pm = {'dbname': 'test'}
+        self.dn = DBDownloader(work_dir='test',
+                               start=141011, end=141025,
+                               dbtype='sqlite',
+                               dbparms=self.pm)
+
+    def test_createDir(self):
+        self.assertTrue(os.path.isdir(self.dn.work_dir))
+
+    def test_authdb(self):
+        self.assertIn('dbname', self.dn.dbparms.keys())
+        val = self.dn.dbparms['dbname']
+        self.assertIsInstance(val, str)
+        self.assertNotEqual(val, '')

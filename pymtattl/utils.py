@@ -29,7 +29,8 @@ def strParms(parms):
         stringParms += "{}={} ".format(k, v)
     return stringParms.strip()
 
-def createFolder(root='Current', branch=None):
+
+def createFolder(root, branch=None):
     """
     Create new folder under given directory,
     return created directory as a string.
@@ -37,12 +38,10 @@ def createFolder(root='Current', branch=None):
         root (string): path to create new folder under
         branch (string): name of new folder
     """
-    if root == 'Current':
-        work_dir = os.getcwd()
-    elif os.path.isdir(root):
+    if os.path.isdir(root):
         work_dir = os.path.abspath(root)
     else:
-        print("Couldn't find directory: ", root)
+        print("Couyldn't find directory: ", root)
         work_dir = os.getcwd()
         create = input("Create folder under <{}>?(y/n)"
                        .format(work_dir)).lower()
