@@ -4,11 +4,13 @@ import os
 from urllib.request import urlopen
 from urllib.error import HTTPError
 from bs4 import BeautifulSoup
-from utils import createFolder, writeDB, getPubDate, notEmptyStr, strParms
+from .utils import (createFolder, writeDB, getPubDate,
+                    notEmptyStr, strParms, dbInsert)
 import sqlite3
 import pandas as pd
 import psycopg2
 from psycopg2.extensions import ISOLATION_LEVEL_AUTOCOMMIT
+from sqlalchemy import create_engine
 
 
 class BaseDownloader:
@@ -18,9 +20,8 @@ class BaseDownloader:
     MAIN_URL = 'http://web.mta.info/developers/'
     TURNSTILE_URL = 'http://web.mta.info/developers/turnstile.html'
 
-    def __init__(self, work_dir, start=None, end=None):
+    def __init__(self, start=None, end=None):
         # define a valid folder for download data
-        self.work_dir = createFolder(work_dir, branch=None)
         assert (start is None or isinstance(start, int)), \
             'Start should be None or 6-digit integer (yymmdd)'
         assert (end is None or isinstance(end, int)), \
@@ -28,7 +29,7 @@ class BaseDownloader:
         self.start = start
         self.end = end
 
-    def get_urls(self, keep_urls=False):
+    def get_urls(self, path='', keep_urls=False):
         """
         Get and save data urls
         """
@@ -59,18 +60,22 @@ class BaseDownloader:
 
         urls = dat_urls + res_urls
         if keep_urls:
-            file_path = os.path.join(self.work_dir, 'data_urls.txt')
+            path = createFolder(path, branch=None)
+            file_path = os.path.join(path, 'data_urls.txt')
+            if os.path.exists(file_path):
+                os.remove(file_path)
+                print('Original data_urls.txt remvoed.')
             with open(file_path, 'w+') as f:
                 f.write('\n'.join(urls))
-            print("Write data_urls.txt to {}".format(self.work_dir))
+            print("Write data_urls.txt to {}".format(path))
         return urls
 
-    def download_to_txt(self, data_folder='data'):
+    def download_to_txt(self, path='', keep_urls=True):
         """
         Download text files
         """
-        dat_dir = createFolder(self.work_dir, data_folder)
-        urls = self.get_urls()
+        dat_dir = createFolder(path, branch=None)
+        urls = self.get_urls(path=dat_dir, keep_urls=keep_urls)
 
         i = 0
         for url in urls:
@@ -95,16 +100,15 @@ class DBDownloader(BaseDownloader):
     Downlaod data and furthermore, save to SQLite database
     """
 
-    def __init__(self, work_dir, start=None, end=None,
+    def __init__(self, start=None, end=None,
                  dbtype='sqlite', dbparms={}):
-        super().__init__(work_dir, start, end)
+        super().__init__(start, end)
         assert dbtype == 'sqlite' or dbtype == 'postgres'
         self.dbtype = dbtype
         self.dbparms = dbparms
         self.new = False
         self.conn_string = ''
         self.local = True
-        self.data_path = ''
 
     def auth_db(self, dbparms):
         if not('dbname' in dbparms.keys() and notEmptyStr(dbparms['dbname'])):
@@ -122,23 +126,27 @@ class DBDownloader(BaseDownloader):
                                                   "in postgres parameters.")
             assert 'host' in dbparms.keys(), ("<host> required "
                                               "in postgres parameters.")
-        # update parameters
-        self.dbparms = dbparms
-        return
+            assert 'port' in dbparms.keys(), ("<port> required "
+                                              "in postgres parameters.")
+        elif self.dbtype == 'sqlite':
+            assert 'path' in dbparms.keys(), ("<path> required "
+                                              "in sqlite parameters.")
+            dbparms['path'] = createFolder(dbparms['path'])
+        return dbparms
 
     def build_conn(self, dbparms):
         dbname = dbparms['dbname']
         if self.dbtype == 'sqlite':
             if dbname.split('.')[-1] != 'db':
                 dbname += '.db'
-            self.conn_string = os.path.join(self.work_dir, dbname)
+            self.conn_string = os.path.join(dbparms['path'], dbname)
         elif self.dbtype == 'postgres':
             if self.new:
-                pre_Parms = {k: self.dbparms[k] for k
-                             in self.dbparms.keys() and k != 'dbname'}
-                self.conn_string = strParms(pre_Parms) + " dbname=postgres"
+                pre_Parms = {k: ('postgres' if k == 'dbname' else dbparms[k])
+                             for k, v in dbparms.items()}
+                self.conn_string = strParms(pre_Parms)
             else:
-                self.conn_string = strParms(self.dbparms)
+                self.conn_string = strParms(dbparms)
         return dbname
 
     def conn_db(self):
@@ -151,31 +159,28 @@ class DBDownloader(BaseDownloader):
         """
         Test connection and create db if not exists
         """
-        self.auth_db(dbparms=self.dbparms)
-        dbname = self.build_conn(dbparms=self.dbparms)
+        dbparms = self.auth_db(self.dbparms)
+        dbname = self.build_conn(dbparms)
 
         if self.dbtype == 'sqlite':
             if os.path.exists(self.conn_string):
                 print('Database {} exists.'.format(dbname))
             else:
                 self.new = True
-            print(self.conn_string)
         try:
             con = self.conn_db()
             if self.dbtype == 'postgres':
-                con.set_isolation_level(ISOLATION_LEVEL_AUTOCOMMIT)
-                c = con.curor()
-                c.execute("SELECT 1 FROM pg_catalog.pg_database "
-                          "WHERE datname='{}'".format(dbname))
-                if c.fetchone()[0]:
-                    print("Database {} exists.".format(dbname))
-                elif self.new:
-                    c.execute('CREATE DATABASE {};'.format(dbname))
-                    self.conn_string = strParms(self.dbparms)
-                    print("Created Database {}.".format(dbname))
-                else:
-                    raise ValueError("Database {} does NOT exist."
-                                     .format(dbname))
+                if self.new:
+                    con.set_isolation_level(ISOLATION_LEVEL_AUTOCOMMIT)
+                    c = con.cursor()
+                    c.execute("SELECT 1 FROM pg_catalog.pg_database "
+                              "WHERE datname='{}';".format(dbname))
+                    if c.fetchone():
+                        print("Database {} exists.".format(dbname))
+                    else:
+                        c.execute('CREATE DATABASE {};'.format(dbname))
+                        self.conn_string = strParms(dbparms)
+                        print("Created Database {}.".format(dbname))
             con.close()
         except Exception as e:
             print(e)
@@ -189,56 +194,56 @@ class DBDownloader(BaseDownloader):
         c = con.cursor()
         c.execute('CREATE TABLE IF NOT EXISTS turnstiles '
                   '(booth text, remote text, scp text, date text, time text, '
-                  'desc text, entries integer, exits integer)')
+                  'description text, entries integer, exits integer);')
         c.execute('CREATE TABLE IF NOT EXISTS name_keys '
                   '(remote text, booth text, station text, '
-                  'line text, devision text)')
-        c.execute('CREATE TABLE IF NOT EXISTS file_names (file text)')
+                  'line text, devision text);')
+        c.execute('CREATE TABLE IF NOT EXISTS file_names (file text);')
         con.commit()
         con.close()
-        print('Created <turnstiles>, <name-keys>, <file_names> tables '
+        print('Created <turnstiles>, <name_keys>, <file_names> tables '
               'if not exist.')
         return
 
-    def init_data(self, folder):
-        data_path = createFolder(self.work_dir, folder)
+    def init_data(self, data_path='data', update=False):
         if os.path.isdir(data_path):
+            if update:
+                data_path = super().download_to_txt(path=data_path,
+                                                    keep_urls=True)
             urls = os.listdir(data_path)
             if sum(['turnstile' in u for u in urls]) > 1:
                 return (data_path, urls)
             else:
                 print("There is no turnstile data in the directory.")
         else:
-            print("Couldn't find {}.".format(data_path))
+            print("Could not find directory {}".format(data_path))
+
         txt = input("Download text files first? "
                     "If not will not keep a copy of text files. (y/n)").lower()
         if txt == 'y':
-            if not notEmptyStr(folder):
-                folder = input("Input data folder name:").lower()
-            data_path = super().download_to_txt(data_folder=folder)
+            data_path = super().download_to_txt(path=data_path, keep_urls=True)
             urls = os.listdir(data_path)
             return (data_path, urls)
         elif txt == 'n':
             print("Download from urls, might take some time...")
             self.local = False
-            data_path = self.work_dir
+            data_path = ''
             urls = super().get_urls()
             return (data_path, urls)
         else:
             raise ValueError("Not valid input.")
 
-    def download_to_db(self, data_folder='data'):
+    def download_to_db(self, data_path='data', update=False):
         """
         Download mta turnstile data and write to database
         """
-        data_path, urls = self.init_data(data_folder)
+        data_path, urls = self.init_data(data_path, update)
         self.init_db()
         self.init_tables()
-
         con = self.conn_db()
         c = con.cursor()
-
-        get_efiles = c.execute('SELECT file FROM file_names').fetchall()
+        c.execute('SELECT file FROM file_names;')
+        get_efiles = c.fetchall()
         exist_files = [i[0] for i in get_efiles]
 
         i = 0
@@ -252,25 +257,11 @@ class DBDownloader(BaseDownloader):
                 else:
                     data = urlopen(url).read().decode('utf-8').split('\n')
                 try:
-                    c = writeDB(fname, data, c)
-                    c.execute('INSERT INTO file_names VALUES (?)', (fname,))
-                    i += 1
-                except Exception as e:
-                    if con:
-                        con.close()
-                    print(e)
-                    raise
-
-            elif fname not in exist_files and fname.endswith('xls'):
-                if self.local:
-                    url = os.path.join(data_path, url)
-                try:
-                    res_data = pd.read_excel(url, header=0)
-                    res_data.columns = ['remote', 'booth', 'station',
-                                        'line', 'division']
-                    res_data.to_sql('name_keys', con=con, if_exists="replace",
-                                    index=False)
-                    c.execute('INSERT INTO file_names VALUES (?)', (fname,))
+                    c = writeDB(dbtype=self.dbtype, filename=fname,
+                                data=data, c=c)
+                    iq_fn = dbInsert('file_names', '%s', dbtype=self.dbtype)
+                    c.execute(iq_fn, (fname,))
+                    con.commit()
                     i += 1
                 except Exception as e:
                     if con:
@@ -279,9 +270,51 @@ class DBDownloader(BaseDownloader):
                     raise
 
             if i > 0 and i % 5 == 0:
-                con.commit()
-                print("Adding {} files to the database...".format(i))
+                print("Added {} files to the database...".format(i))
         con.commit()
         con.close()
-        print("Finish writing {} files to the database.".format(i))
+        print("Finish writing {} data files to the database.".format(i))
+        return
+
+    def init_namekeys(self, data_path='data', update=False):
+        """
+        Download mta turnstile data and write to database
+        """
+        data_path, urls = self.init_data(data_path, update)
+        self.init_db()
+        self.init_tables()
+        con = self.conn_db()
+        c = con.cursor()
+
+        url = [u for u in urls if u.endswith('xls')][0]
+        if self.local:
+            url = os.path.join(data_path, url)
+        try:
+            res_data = pd.read_excel(url, header=0)
+            res_data.columns = ['remote', 'booth', 'station',
+                                'line', 'division']
+            if self.dbtype == 'sqlite':
+                res_data.to_sql('name_keys', con=con,
+                                if_exists="replace", index=False)
+            elif self.dbtype == 'postgres':
+                eng = ("postgresql+psycopg2://{}:{}@{}:{}/{}"
+                       .format(self.dbparms['user'],
+                               self.dbparms['password'],
+                               self.dbparms['host'],
+                               self.dbparms['port'],
+                               self.dbparms['dbname']))
+                engine = create_engine(eng)
+                res_data.to_sql('name_keys', con=engine,
+                                if_exists="replace", index=False)
+            iq_fn = dbInsert('file_names', '%s', dbtype=self.dbtype)
+            c.execute(iq_fn, (url.split('/')[-1],))
+        except Exception as e:
+            if con:
+                con.close()
+            print(e)
+            raise
+
+        con.commit()
+        con.close()
+        print("Added and refreshed name_keys file to the database")
         return
