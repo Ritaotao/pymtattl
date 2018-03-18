@@ -97,7 +97,7 @@ class BaseDownloader:
 
 class DBDownloader(BaseDownloader):
     """
-    Downlaod data and furthermore, save to SQLite database
+    Downlaod mta turnstile data and save to database
     """
 
     def __init__(self, start=None, end=None,
@@ -111,6 +111,9 @@ class DBDownloader(BaseDownloader):
         self.local = True
 
     def auth_db(self, dbparms):
+        """
+        Authenticate db arguments
+        """
         if not('dbname' in dbparms.keys() and notEmptyStr(dbparms['dbname'])):
             create = input("No dbname provided. "
                            "Do you want to create a new db? (y/n)").lower()
@@ -135,6 +138,9 @@ class DBDownloader(BaseDownloader):
         return dbparms
 
     def build_conn(self, dbparms):
+        """
+        Form connection argument for db
+        """
         dbname = dbparms['dbname']
         if self.dbtype == 'sqlite':
             if dbname.split('.')[-1] != 'db':
@@ -206,6 +212,9 @@ class DBDownloader(BaseDownloader):
         return
 
     def init_data(self, data_path='data', update=False):
+        """
+        Moniter and acquire online and local data files
+        """
         if os.path.isdir(data_path):
             if update:
                 data_path = super().download_to_txt(path=data_path,
@@ -235,7 +244,7 @@ class DBDownloader(BaseDownloader):
 
     def download_to_db(self, data_path='data', update=False):
         """
-        Download mta turnstile data and write to database
+        Download mta turnstile data and write to db
         """
         data_path, urls = self.init_data(data_path, update)
         self.init_db()
@@ -278,7 +287,7 @@ class DBDownloader(BaseDownloader):
 
     def init_namekeys(self, data_path='data', update=False):
         """
-        Download mta turnstile data and write to database
+        Download mta turnstile name keys and write to database
         """
         data_path, urls = self.init_data(data_path, update)
         self.init_db()

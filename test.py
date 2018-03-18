@@ -28,6 +28,13 @@ class BaseDownloaderTest(TestCase):
             self.assertEqual(i+1, 6)
         shutil.rmtree(self.url_dir, ignore_errors=False, onerror=None)
 
+    def test_download_to_txt(self):
+        with patch('builtins.input', return_value='y'):
+            dat_dir = self.dn.download_to_txt(path=self.path, keep_urls=False)
+            self.assertTrue(os.path.exists(dat_dir))
+            self.assertEqual(len(os.listdir(dat_dir)), 6)
+        shutil.rmtree(dat_dir, ignore_errors=False, onerror=None)
+
 
 class DBDownloaderSqliteTest(TestCase):
 
