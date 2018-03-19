@@ -17,19 +17,25 @@ def sqlite_example():
           'dbname': 'test'}
     sqlite_downloader = DBDownloader(start=141011, end=141025,
                                      dbtype='sqlite', dbparms=pm)
-    sqlite_downloader.download_to_db(data_path='data', update=False)
+    sqlite_downloader.init_namekeys(data_path='C:\\Users\\Owner\\'
+                                              'Desktop\\mta\\data',
+                                              update=False)
+    sqlite_downloader.download_to_db(data_path='C:\\Users\\Owner\\'
+                                               'Desktop\\mta\\data',
+                                     update=False)
     return
-# sqlite_example()
+#sqlite_example()
 
 
 def postgres_example():
-    pm = {'dbname': 'mta1',
-          'user': 'b',
-          'password': 'c',
+    pm = {'dbname': 'mta2',
+          'user': 'ritaotao',
+          'password': '1936',
           'host': 'localhost',
           'port': '5432'}
     postgres_downloader = DBDownloader(start=141011, end=141025,
                                        dbtype='postgres', dbparms=pm)
+    """
     postgres_downloader.init_namekeys(data_path='C:\\Users\\Owner\\'
                                                 'Desktop\\mta\\data',
                                       update=True)
@@ -37,8 +43,5 @@ def postgres_example():
     postgres_downloader.download_to_db(data_path='C:\\Users\\Owner\\'
                                                  'Desktop\\mta\\data',
                                        update=True)
-    """
     return
-
-
 postgres_example()

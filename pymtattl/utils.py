@@ -30,14 +30,25 @@ def strParms(parms):
     return stringParms.strip()
 
 
-def dbInsert(table, vals, dbtype):
+def dbInsert(table, cols, vals, dbtype):
     """
     Handles db insert statement difference here
     """
     if dbtype == 'sqlite':
-        vals = ','.join(['?'] * len(vals.split(',')))
-    iq = 'INSERT INTO ' + str(table) + ' VALUES (' + vals + ');'
+        vals = ','.join(['?'] * (len(vals.split(','))+1))
+        iq = 'INSERT INTO ' + str(table) + ' VALUES (' + vals + ');'
+    elif dbtype == 'postgres':
+        cols = ' (' + ','.join(cols) + ') '
+        iq = 'INSERT INTO ' + str(table) + cols + ' VALUES (' + vals + ');'
     return iq
+
+
+def dbPK(dbtype):
+    if dbtype == 'postgres':
+        pk = 'id SERIAL PRIMARY KEY'
+    elif dbtype == 'sqlite':
+        pk = 'id INTEGER PRIMARY KEY'
+    return pk
 
 
 def createFolder(root, branch=None):
@@ -82,13 +93,15 @@ def writeDB(dbtype, filename, data, c):
     """
     Parse mta turnstile data differently,
     due to changes made post 2014-10-18,
-    return sqlite cursor object.
+    return db cursor object.
     params:
         filename (string): use to determine time period
         data (list): list of row strings within file
-        c: a sqlite cursor object
+        c: a db cursor object
     """
-    iq_tn = dbInsert('turnstiles', '%s,%s,%s,%s,%s,%s,%s,%s', dbtype)
+    cols = ['booth', 'remote', 'scp', 'date', 'time', 'description',
+            'entries', 'exits']
+    iq_tn = dbInsert('turnstiles', cols, '%s,%s,%s,%s,%s,%s,%s,%s', dbtype)
     if int(filename.split('_')[1].split('.')[0]) < 141018:
         for line in data:
             line = line.replace('\x00', '')
@@ -100,10 +113,12 @@ def writeDB(dbtype, filename, data, c):
                 rows = []
                 for i in range(0, len(vals), 5):
                     try:
-                        row = tuple(keys
-                                    + [formatDate(vals[i])]
-                                    + vals[(i+1):(i+3)]
-                                    + [int(j) for j in vals[(i+3):(i+5)]])
+                        row = (keys + [formatDate(vals[i])] + vals[(i+1):(i+3)]
+                               + [int(j) for j in vals[(i+3):(i+5)]])
+                        if dbtype == 'sqlite':
+                            row = tuple([None] + row)
+                        else:
+                            row = tuple(row)
                         rows.append(row)
                     except ValueError as e:
                         continue
@@ -121,10 +136,12 @@ def writeDB(dbtype, filename, data, c):
             cols = line.strip().split(',')
             if len(cols) == 11:
                 try:
-                    row = tuple(cols[:3]
-                                + [formatDate(cols[6])]
-                                + cols[7:9]
-                                + [int(i) for i in cols[9:11]])
+                    row = (cols[:3] + [formatDate(cols[6])] + cols[7:9]
+                           + [int(i) for i in cols[9:11]])
+                    if dbtype == 'sqlite':
+                        row = tuple([None] + row)
+                    else:
+                        row = tuple(row)
                     c.execute(iq_tn, row)
                 except ValueError as e:
                     continue

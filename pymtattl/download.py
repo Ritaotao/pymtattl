@@ -5,7 +5,7 @@ from urllib.request import urlopen
 from urllib.error import HTTPError
 from bs4 import BeautifulSoup
 from .utils import (createFolder, writeDB, getPubDate,
-                    notEmptyStr, strParms, dbInsert)
+                    notEmptyStr, strParms, dbInsert, dbPK)
 import sqlite3
 import pandas as pd
 import psycopg2
@@ -57,7 +57,6 @@ class BaseDownloader:
 
         print("{} data files and {} resource files available for download."
               .format(len(dat_urls), len(res_urls)))
-
         urls = dat_urls + res_urls
         if keep_urls:
             path = createFolder(path, branch=None)
@@ -198,13 +197,19 @@ class DBDownloader(BaseDownloader):
         """
         con = self.conn_db()
         c = con.cursor()
-        c.execute('CREATE TABLE IF NOT EXISTS turnstiles '
-                  '(booth text, remote text, scp text, date text, time text, '
-                  'description text, entries integer, exits integer);')
-        c.execute('CREATE TABLE IF NOT EXISTS name_keys '
-                  '(remote text, booth text, station text, '
-                  'line text, devision text);')
-        c.execute('CREATE TABLE IF NOT EXISTS file_names (file text);')
+        pk = dbPK(self.dbtype)
+        tn = ("CREATE TABLE IF NOT EXISTS turnstiles (" + pk +
+              ", booth TEXT, remote TEXT, scp TEXT, date TEXT, "
+              "time TEXT, description TEXT, entries INTEGER, "
+              "exits INTEGER);")
+        nk = ("CREATE TABLE IF NOT EXISTS name_keys (" + pk +
+              ", remote TEXT, booth TEXT, station TEXT, "
+              "line TEXT, devision TEXT);")
+        fn = ("CREATE TABLE IF NOT EXISTS file_names (" + pk +
+              ", file TEXT);")
+        c.execute(tn)
+        c.execute(nk)
+        c.execute(fn)
         con.commit()
         con.close()
         print('Created <turnstiles>, <name_keys>, <file_names> tables '
@@ -220,7 +225,16 @@ class DBDownloader(BaseDownloader):
                 data_path = super().download_to_txt(path=data_path,
                                                     keep_urls=True)
             urls = os.listdir(data_path)
-            if sum(['turnstile' in u for u in urls]) > 1:
+            dat_urls = [u for u in urls if u.startswith('turnstile')]
+            res_urls = [u for u in urls if u.endswith('xls')]
+            if self.start is not None:
+                dat_urls = [u for u in dat_urls
+                            if getPubDate(u) >= self.start]
+            if self.end is not None:
+                dat_urls = [u for u in dat_urls
+                            if getPubDate(u) <= self.end]
+            if dat_urls:
+                urls = dat_urls + res_urls
                 return (data_path, urls)
             else:
                 print("There is no turnstile data in the directory.")
@@ -268,8 +282,13 @@ class DBDownloader(BaseDownloader):
                 try:
                     c = writeDB(dbtype=self.dbtype, filename=fname,
                                 data=data, c=c)
-                    iq_fn = dbInsert('file_names', '%s', dbtype=self.dbtype)
-                    c.execute(iq_fn, (fname,))
+                    iq_fn = dbInsert('file_names', ['file'], '%s',
+                                     dbtype=self.dbtype)
+                    if self.dbtype == 'sqlite':
+                        fname = tuple([None] + [fname])
+                    else:
+                        fname = tuple([fname])
+                    c.execute(iq_fn, fname)
                     con.commit()
                     i += 1
                 except Exception as e:
@@ -293,7 +312,6 @@ class DBDownloader(BaseDownloader):
         self.init_db()
         self.init_tables()
         con = self.conn_db()
-        c = con.cursor()
 
         url = [u for u in urls if u.endswith('xls')][0]
         if self.local:
@@ -302,6 +320,8 @@ class DBDownloader(BaseDownloader):
             res_data = pd.read_excel(url, header=0)
             res_data.columns = ['remote', 'booth', 'station',
                                 'line', 'division']
+            res_data.reset_index(inplace=True)
+            res_data.columns.values[0] = 'id'
             if self.dbtype == 'sqlite':
                 res_data.to_sql('name_keys', con=con,
                                 if_exists="replace", index=False)
@@ -315,8 +335,6 @@ class DBDownloader(BaseDownloader):
                 engine = create_engine(eng)
                 res_data.to_sql('name_keys', con=engine,
                                 if_exists="replace", index=False)
-            iq_fn = dbInsert('file_names', '%s', dbtype=self.dbtype)
-            c.execute(iq_fn, (url.split('/')[-1],))
         except Exception as e:
             if con:
                 con.close()
@@ -325,5 +343,5 @@ class DBDownloader(BaseDownloader):
 
         con.commit()
         con.close()
-        print("Added and refreshed name_keys file to the database")
+        print("Added name_keys file to the database, reset if exists.")
         return
