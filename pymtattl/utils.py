@@ -9,11 +9,33 @@ def getPubDate(fname):
     return int(fname.split('_')[1].split('.')[0])
 
 
+def filterUrls(urls=[], start=None, end=None):
+    assert (start is None or isinstance(start, int)), \
+        'Start should be None or 6-digit integer (yymmdd)'
+    assert (end is None or isinstance(end, int)), \
+        'End should be None or 6-digit integer (yymmdd)'
+    if start is not None:
+        urls = [u for u in urls if getPubDate(u) >= start]
+    if end is not None:
+        urls = [u for u in urls if getPubDate(u) <= end]
+    if not urls:
+        raise ValueError('Can not identify any data urls '
+                         'within specified timeframe, '
+                         'please check start and end date.')
+    else:
+        return urls
+
+
 def formatDate(val):
     """
-    String '%m-%d-%y' to string'%Y-%m-%d'
+    Parse date string to '%Y-%m-%d'
     """
-    return datetime.strptime(val, '%m-%d-%y').strftime('%Y-%m-%d')
+    for fmt in ('%m-%d-%y', '%m/%d/%Y'):
+        try:
+            return datetime.strptime(val, fmt).strftime('%Y-%m-%d')
+        except ValueError as e:
+            pass
+    raise ValueError('no valid date format found.')
 
 
 def notEmptyStr(var):
@@ -43,50 +65,74 @@ def dbInsert(table, cols, vals, dbtype):
     return iq
 
 
-def dbPK(dbtype):
-    if dbtype == 'postgres':
-        pk = 'id SERIAL PRIMARY KEY'
-    elif dbtype == 'sqlite':
-        pk = 'id INTEGER PRIMARY KEY'
-    return pk
-
-
-def createFolder(root, branch=None):
+def createFolder(root):
     """
-    Create new folder under given directory,
-    return created directory as a string.
-    params:
-        root (string): path to create new folder under
-        branch (string): name of new folder
+    Create new folder, return created directory as a string.
     """
     if os.path.isdir(root):
         work_dir = os.path.abspath(root)
     elif root == '':
         work_dir = os.getcwd()
     else:
-        print("Couldn't find directory: ", root)
-        work_dir = os.getcwd()
         folder = os.path.basename(root)
-        assert notEmptyStr(folder), "Couldn't parse folder name."
-        create = input("Create folder <{}> under <{}>?(y/n)"
-                       .format(folder, work_dir)).lower()
-        if create == 'y':
-            return createFolder(root=work_dir, branch=folder)
-        else:
-            raise OSError('Error: Directory does not exist: {}'.format(root))
-
-    if notEmptyStr(branch):
-        work_dir = os.path.join(work_dir, branch)
+        assert notEmptyStr(folder), ("Couldn't parse folder name from <{}>."
+                                     .format(root))
+        work_dir = os.path.join(os.getcwd(), folder)
         if not os.path.isdir(work_dir):
-            try:
-                os.mkdir(work_dir)
-                print("Created {}.".format(work_dir))
-            except OSError as err:
-                raise OSError('Error: Failed to create dir {}: {}'
-                              .format(work_dir, err))
-        else:
-            print("{} alreayd exists.".format(work_dir))
+            create = input("Create directory <{}>? (y/n)"
+                           .format(work_dir)).lower()
+            if create == 'y':
+                try:
+                    os.mkdir(work_dir)
+                    print("Created <{}>.".format(work_dir))
+                except OSError as e:
+                    raise OSError('Error: Failed to create dir <{}>: {}'
+                                  .format(work_dir, e))
+            else:
+                raise OSError('Error: Directory does not exist: {}'
+                              .format(root))
     return work_dir
+
+
+def parseRows(fname, data):
+    """
+    Parse mta turnstile data differently,
+    due to changes made post 2014-10-18
+    params:
+        filename (string): use to determine time period
+        data (list): list of row strings within file
+    """
+    rows = []
+    if getPubDate(fname) < 141018:
+        for line in data:
+            line = line.replace('\x00', '')
+            cols = line.strip().split(',')
+            if (len(cols) - 3) % 5 == 0:
+                keys, vals = cols[:3], cols[3:]
+                # keys: ca/units/scp
+                # + every 5: daten/timen/descn, entriesn/exitsn
+                for i in range(0, len(vals), 5):
+                    try:
+                        row = tuple(keys
+                                    + [formatDate(vals[i])]
+                                    + vals[(i+1):(i+3)]
+                                    + [int(j) for j in vals[(i+3):(i+5)]])
+                        rows.append(row)
+                    except ValueError as e:
+                        continue
+    else:
+        for line in data[1:]:
+            line = line.replace('\x00', '')
+            cols = line.strip().split(',')
+            if len(cols) == 11:
+                try:
+                    row = tuple(cols[:3]
+                                + [formatDate(cols[6])] + cols[7:9]
+                                + [int(i) for i in cols[9:11]])
+                    rows.append(row)
+                except ValueError as e:
+                    continue
+    return rows
 
 
 def writeDB(dbtype, filename, data, c):

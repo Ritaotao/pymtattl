@@ -1,4 +1,4 @@
-from pymtattl.download import BaseDownloader, DBDownloader
+from pymtattl.download import BaseDownloader, SqliteDownloader
 
 
 def base_example():
@@ -15,33 +15,28 @@ def sqlite_example():
     """Run Sqlite example"""
     pm = {'path': 'test',
           'dbname': 'test'}
-    sqlite_downloader = DBDownloader(start=141011, end=141025,
-                                     dbtype='sqlite', dbparms=pm)
-    sqlite_downloader.init_namekeys(data_path='C:\\Users\\Owner\\'
-                                              'Desktop\\mta\\data',
-                                              update=False)
-    sqlite_downloader.download_to_db(data_path='C:\\Users\\Owner\\'
-                                               'Desktop\\mta\\data',
-                                     update=False)
+    sqlite_downloader = SqliteDownloader(start=141011, end=141025,
+                                         dbparms=pm)
+    sqlite_downloader.init_namekeys(path='test', update=False)
+    sqlite_downloader.download_to_db(path='test', update=False)
     return
-#sqlite_example()
+sqlite_example()
 
-
+"""
 def postgres_example():
-    pm = {'dbname': 'mta2',
-          'user': 'ritaotao',
-          'password': '1936',
+    pm = {'dbname': 'mta1',
+          'user': 'a',
+          'password': 'b',
           'host': 'localhost',
           'port': '5432'}
-    postgres_downloader = DBDownloader(start=141011, end=141025,
+    postgres_downloader = PostgresDownloader(start=141011, end=141025,
                                        dbtype='postgres', dbparms=pm)
-    """
-    postgres_downloader.init_namekeys(data_path='C:\\Users\\Owner\\'
-                                                'Desktop\\mta\\data',
+
+    postgres_downloader.init_namekeys(path='data',
                                       update=True)
-    """
-    postgres_downloader.download_to_db(data_path='C:\\Users\\Owner\\'
-                                                 'Desktop\\mta\\data',
+
+    postgres_downloader.download_to_db(path='data',
                                        update=True)
     return
 postgres_example()
+"""
