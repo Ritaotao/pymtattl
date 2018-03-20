@@ -48,7 +48,7 @@ class BaseDownloader:
             file_path = os.path.join(path, 'data_urls.txt')
             if os.path.exists(file_path):
                 os.remove(file_path)
-                print('Original data_urls.txt remvoed.')
+                print('Original data_urls.txt removed.')
             with open(file_path, 'w+') as f:
                 f.write('\n'.join(urls))
             print("Write data_urls.txt to {}".format(path))
@@ -273,7 +273,7 @@ class PostgresDownloader(BaseDownloader):
             create = input("No dbname provided. "
                            "Do you want to create a new db? (y/n)").lower()
             if create == 'y':
-                dbparms['dbname'] = input("Please enter a valid dbname:")
+                self.dbparms['dbname'] = input("Please enter a valid dbname:")
                 self.new = True
             else:
                 raise ValueError("<dbname> required.")
@@ -285,17 +285,17 @@ class PostgresDownloader(BaseDownloader):
                                           "in postgres parameters.")
         assert 'port' in dbparms.keys(), ("<port> required "
                                           "in postgres parameters.")
-        return dbparms
+        return
 
-    def build_conn(self, dbparms):
+    def build_conn(self, dbparms, new):
         """ Form connection argument for db """
-        dbname = dbparms['dbname']
-        if self.new:
-            pre_Parms = {k: ('postgres' if k == 'dbname' else dbparms[k]) for k, v in dbparms.items()}
+        if new:
+            pre_Parms = {k: ('postgres' if k == 'dbname' else dbparms[k])
+                         for k, v in dbparms.items()}
             self.conn_string = strParms(pre_Parms)
         else:
             self.conn_string = strParms(dbparms)
-        return dbname
+        return
 
     def conn_db(self):
         con = psycopg2.connect(dsn=self.conn_string)
@@ -303,8 +303,9 @@ class PostgresDownloader(BaseDownloader):
 
     def init_db(self):
         """ Init database and tables """
-        dbparms = self.auth_db(self.dbparms)
-        dbname = self.build_conn(dbparms)
+        self.auth_db(self.dbparms)
+        self.build_conn(self.dbparms, self.new)
+        dbname = self.dbparms['dbname']
 
         try:
             con = self.conn_db()
@@ -317,8 +318,10 @@ class PostgresDownloader(BaseDownloader):
                     print("Database {} exists.".format(dbname))
                 else:
                     c.execute('CREATE DATABASE {};'.format(dbname))
-                    self.conn_string = strParms(dbparms)
                     print("Created Database {}.".format(dbname))
+                con.close()
+                self.build_conn(self.dbparms, False)
+                con = self.conn_db()
         except Exception as e:
             print(e)
             raise
@@ -383,9 +386,6 @@ class PostgresDownloader(BaseDownloader):
         c.execute('SELECT file FROM file_names;')
         get_efiles = c.fetchall()
         exist_files = [i[0] for i in get_efiles]
-        iq1 = """INSERT INTO turnstiles (booth, remote, scp, date, time,
-                 description, entries, exits) VALUES (?,?,?,?,?,?,?,?);"""
-        iq2 = """INSERT INTO file_names (file) VALUES (?);"""
         i = 0
         for url in urls:
             fname = url.split('/')[-1]
@@ -399,8 +399,13 @@ class PostgresDownloader(BaseDownloader):
                 try:
                     rows = parseRows(fname, data)
                     if rows:
-                        c.executemany(iq1, rows)
-                        c.execute(iq2, (fname,))
+                        args = ','.join(c.mogrify("(%s,%s,%s,%s,%s,%s,%s,%s)", x).decode('utf-8') for x in rows)
+                        # c.executemany(iq1, rows)
+                        c.execute("INSERT INTO turnstiles(booth, remote, scp,"
+                                  "date, time, description, entries, exits)"
+                                  " VALUES" + args)
+                        c.execute("INSERT INTO file_names (file)"
+                                  " VALUES (%s);", (fname,))
                         con.commit()
                         i += 1
                     else:

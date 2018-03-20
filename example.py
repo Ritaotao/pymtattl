@@ -1,4 +1,5 @@
-from pymtattl.download import BaseDownloader, SqliteDownloader
+from pymtattl.download import (BaseDownloader, SqliteDownloader,
+                               PostgresDownloader)
 
 
 def base_example():
@@ -20,23 +21,24 @@ def sqlite_example():
     sqlite_downloader.init_namekeys(path='test', update=False)
     sqlite_downloader.download_to_db(path='test', update=False)
     return
-sqlite_example()
+# sqlite_example()
 
-"""
+
 def postgres_example():
-    pm = {'dbname': 'mta1',
+    pm = {'dbname': '',
           'user': 'a',
           'password': 'b',
           'host': 'localhost',
           'port': '5432'}
-    postgres_downloader = PostgresDownloader(start=141011, end=141025,
-                                       dbtype='postgres', dbparms=pm)
+    postgres_downloader = PostgresDownloader(start=None, end=None,
+                                             dbparms=pm)
 
-    postgres_downloader.init_namekeys(path='data',
+    postgres_downloader.init_namekeys(path='C:\\Users\\Owner\\Desktop\\'
+                                           'mta\\data',
                                       update=True)
 
-    postgres_downloader.download_to_db(path='data',
+    postgres_downloader.download_to_db(path='C:\\Users\\Owner\\Desktop\\'
+                                            'mta\\data',
                                        update=True)
     return
 postgres_example()
-"""
