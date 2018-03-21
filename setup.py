@@ -8,7 +8,7 @@ def read(fname):
 
 setup(name='pymtattl',
       packages=['pymtattl'],
-      version='0.1.3',
+      version='0.1.4',
       license='MIT',
       author='Ritaotao',
       author_email='ritaotao28@gmail.com',
@@ -16,7 +16,7 @@ setup(name='pymtattl',
       long_description=read('README.md'),
       url='https://github.com/Ritaotao/pymtattl',
       download_url='https://github.com/Ritaotao/pymtattl/archive/0.1.3.tar.gz',
-      install_requires=['beautifulsoup4', 'pandas'],
+      install_requires=['beautifulsoup4', 'pandas', 'psycopg2'],
       keywords=['mta', 'data', 'traffic'],
       classifiers=[
         'Programming Language :: Python :: 3',

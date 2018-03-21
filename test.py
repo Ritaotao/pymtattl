@@ -3,7 +3,7 @@ import shutil
 from unittest import TestCase
 from unittest.mock import patch
 
-from pymtattl.download import BaseDownloader, DBDownloader
+from pymtattl.download import BaseDownloader, SqliteDownloader
 
 
 class BaseDownloaderTest(TestCase):
@@ -36,13 +36,11 @@ class BaseDownloaderTest(TestCase):
         shutil.rmtree(dat_dir, ignore_errors=False, onerror=None)
 
 
-class DBDownloaderSqliteTest(TestCase):
+class SqliteDownloaderTest(TestCase):
 
     def setUp(self):
         self.pm = {'path': 'test1'}
-        self.dn = DBDownloader(start=141011, end=141025,
-                               dbtype='sqlite',
-                               dbparms=self.pm)
+        self.dn = SqliteDownloader(start=141011, end=141025, dbparms=self.pm)
 
     def test_auth_db(self):
         se = ['y', 'test', 'y']

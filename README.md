@@ -2,9 +2,9 @@
 
 ## Introduction
 
-Download and store MTA Turnstile Data in text files or a SQLite database
+Download and store MTA Turnstile Data
 
-Automate downloading of turnstile entry/exit data from MTA. Allow to save data within requested time frame into a SQlite database and reshape data prior to 10/18/2014 into a more "relational" format. Considering to support more database types.
+Automate downloading turnstile entry/exit data from MTA website. Save as text files, or directly write to a SQLite/Postgres Database. Can also specify a requested time frame as the earliest files went back to 2010.
 
 MTA Turnstile Data: http://web.mta.info/developers/turnstile.html
 
@@ -15,11 +15,11 @@ MTA Turnstile Data: http://web.mta.info/developers/turnstile.html
 
 * [Download](#download)
 
-  * [Urls](#urls)
-
   * [Text Files](#text-files)
 
-  * [SQlite Database](#sqlite-database)
+  * [SQLite Database](#sqlite-database)
+
+  * [Postgres Database](#postgres-database)
 
 * [Caveats](#caveats)
 
@@ -32,72 +32,101 @@ MTA Turnstile Data: http://web.mta.info/developers/turnstile.html
 ## Requirements
 
 * Written for Python 3! Feel free to test and contribute using Python 2!
-* Requires bs4, Pandas
+* Requires bs4, pandas, psycopg2
 
-## Download
-
-### Initate MTADownloader
-
-    from pymtattl.download import MTADownloader
-    mta_downlowder = MTADownloader(work_dir='Current', start=141018, end=None)
-
-Parameters
-
-* `work_dir`
-
-  - Type: String
-  - specify full folder directory to store downloaded data
-  - `'Current'`: default, uses current working directory `os.getcwd()`
-  - Or a specific valid directory
-
-* `start/end`
-
-  - Type: Integer or None
-  - define the date range to pull data files *(recommend testing with small date ranges, as downloading all files might be slow)*
-  - Example (yymmdd) for 2014-10-18: `141018`
-
-### Urls
-
-Get **urls** for data within date range and resource files (description, name key)
-
-    urls = mta_downloader.get_urls(keep_urls=True)
-
-* Set `keep_url = True` to save the returned urls in a text file *data_urls.txt*.
-
-* Returns list of url strings
+## Download Methods
 
 ### Text Files
 
-Download requested data as separate **text files**
+BaseDownloader: Download requested data as separate **text files**
 
-    dat_dir = mta_downloader.download_to_txt()
+    from pymtattl.download import BaseDownloader
+    base_downlowder = BaseDownloader(start=141018, end=None)    
+    dat_dir = base_downloader.download_to_txt(path='data', keep_urls=False)  
 
-* Default create and store in a new folder **data** under working directory
+* `start/end`: *integer or None*
+  - Define the date range to pull data files *(recommend testing with small date ranges, as downloading all files might be slow)*
+  - Example (yymmdd) for 2014-10-18: `141018`
 
-* `data_folder` *(optional)*: provide a custom folder name
+* `path`: *string*
+  - An existing directory to save downloaded data files
+  - Can also put an empty string (to save under current working directory) or a new folder name (ie. 'data')
+
+* `keep_urls`: *boolean*
+  - If true will include retrieved urls in **data_urls.txt** under provided directory
 
 * Returns data folder directory
 
-### SQlite Database
+### SQLite Database
 
-Reformat **All** local data or download **requested** data and store in a **SQLite database**
+SqliteDownloader: Reformat data either from **local path** or directly downloaded from MTA website and save in a SQLite database
 
-    db_path = mta_downloader.download_to_db()
+    from pymtattl.download import SqliteDownloader
+    # provide database parameters
+    pm = {'path': 'test',
+          'dbname': 'testdb'}
+    sqlite_downloader = SqliteDownloader(start=141018, end=None, dbparms=pm)
+    # download data files and save to sqlite db
+    sqlite_downloader.download_to_db(path='data', update=False)
+    # write name_keys file to db
+    sqlite_downloader.init_namekeys(path='data', update=False)
 
-* Create a SQlite database **data.db** under working directory and 3 tables
+* Create (if not exists) a SQLite database **testdb.db** under **~/test/** and 3 tables
 
   - **turnstile**: holds turnstile data
   - **name_keys**: a matching table to lookup station name given remote and booth
   - **file_names**: names of data files that are already in **turnstile** table
 
-* `data_path`:
+* `start/end`: *integer or None*
+  - Define the date range to pull data files *(recommend testing with small date ranges, as downloading all files might be slow)*
+  - Example (yymmdd) for 2014-10-18: `141018`
 
-  - `''` | `None`: must run `download_to_txt()` first, then the function uses text files within data folder directory (instance attribute)
-  - Otherwise, specify a full data folder directory to search for existing data text files
+* `dbparm`: *dict*
+  - `path`: path to create or find an existing sqlite database file
+  - `dbname`: database file name to create or save to if exists
 
-* If can not find local text files, choose to download text files first or directly store in the database (use with caution, could be very slow!)
+* `path`: *string*
+  - Local data folder path if data already downloaded
+  - Specify an existing directory or a new folder name to store downloaded text files
+  - Can also choose to directly read from MTA website and write to db, as if there is no local data files
 
-* Returns database directory
+* Returns data folder directory
+
+### Postgres Database
+
+PostgresDownloader: Reformat data either from **local path** or directly downloaded from MTA website and save in a Postgres database
+
+    from pymtattl.download import PostgresDownloader
+    # provide database parameters
+    pm = {'dbname': '',
+          'user': 'a',
+          'password': 'b',
+          'host': 'localhost',
+          'port': '5432'}
+    postgres_downloader = PostgresDownloader(start=141018, end=None, dbparms=pm)
+    # download data files and save to postgres db
+    postgres_downloader.download_to_db(path='data', update=False)
+    # write name_keys file to db
+    postgres_downloader.init_namekeys(path='data', update=False)
+
+* Create (if not exists) a Postgres database and 3 tables
+
+  - **turnstile**: holds turnstile data
+  - **name_keys**: a matching table to lookup station name given remote and booth
+  - **file_names**: names of data files that are already in **turnstile** table
+
+* `start/end`: *integer or None*
+  - Define the date range to pull data files *(recommend testing with small date ranges, as downloading all files might be slow)*
+  - Example (yymmdd) for 2014-10-18: `141018`
+
+* `dbparm`: *dict*
+  - `dbname`: database name to connect, if empty string or remove from the dict, will prompt to ask for new database name to **create**
+  - `user`|`password`|`host`|`port`: parameters to connect to Postgres instance
+
+* `path`: *string*
+  - Local data folder path if data already downloaded
+  - Specify an existing directory or a new folder name to store downloaded text files
+  - Can also choose to directly read from MTA website and write to db, as if there is no local data files
 
 ## Caveats
 
@@ -105,6 +134,7 @@ Reformat **All** local data or download **requested** data and store in a **SQLi
 
   - In Turnstile_120428.txt, one line with empty ('') exit number
   - In Turnstile_120714.txt, first few lines could not be parsed
+  - It seems recently date strings were reformatted to `mm/dd/yyyy` (03/20/2018)
 
 ## To-Do
 

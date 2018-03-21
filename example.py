@@ -21,13 +21,13 @@ def sqlite_example():
     sqlite_downloader.init_namekeys(path='test', update=False)
     sqlite_downloader.download_to_db(path='test', update=False)
     return
-# sqlite_example()
+sqlite_example()
 
 
 def postgres_example():
     pm = {'dbname': '',
-          'user': 'a',
-          'password': 'b',
+          'user': 'ritaotao',
+          'password': '1936',
           'host': 'localhost',
           'port': '5432'}
     postgres_downloader = PostgresDownloader(start=None, end=None,
@@ -41,4 +41,4 @@ def postgres_example():
                                             'mta\\data',
                                        update=True)
     return
-postgres_example()
+# postgres_example()
