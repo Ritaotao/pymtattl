@@ -1,5 +1,6 @@
 from pymtattl.download import (BaseDownloader, SqliteDownloader,
                                PostgresDownloader)
+from pymtattl.helper import PostgresHelper
 
 
 def base_example():
@@ -21,13 +22,13 @@ def sqlite_example():
     sqlite_downloader.init_namekeys(path='test', update=False)
     sqlite_downloader.download_to_db(path='test', update=False)
     return
-sqlite_example()
+# sqlite_example()
 
 
 def postgres_example():
     pm = {'dbname': '',
-          'user': 'ritaotao',
-          'password': '1936',
+          'user': 'u',
+          'password': 'p',
           'host': 'localhost',
           'port': '5432'}
     postgres_downloader = PostgresDownloader(start=None, end=None,
@@ -42,3 +43,22 @@ def postgres_example():
                                        update=True)
     return
 # postgres_example()
+
+
+def postgres_helper_example():
+    pm = {'dbname': 'mta',
+          'user': 'u',
+          'password': 'p',
+          'host': 'localhost',
+          'port': '5432'}
+    postgres_helper = PostgresHelper(dbparms=pm)
+    postgres_helper.append_namekeys(initial=True)
+    miss_stations = postgres_helper.create_geostations()
+    for i in miss_stations:
+        print(i)
+    df = postgres_helper.daily_station_summary(start="2010-04-17",
+                                               end="2010-04-21",
+                                               geo=True,
+                                               create=True, table='dss41721')
+    return df.head()
+print(postgres_helper_example())

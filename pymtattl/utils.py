@@ -1,5 +1,8 @@
 import os
+import json
 from datetime import datetime
+from urllib.request import urlopen
+from urllib.error import HTTPError
 
 
 def getPubDate(fname):
@@ -135,60 +138,14 @@ def parseRows(fname, data):
     return rows
 
 
-def writeDB(dbtype, filename, data, c):
-    """
-    Parse mta turnstile data differently,
-    due to changes made post 2014-10-18,
-    return db cursor object.
-    params:
-        filename (string): use to determine time period
-        data (list): list of row strings within file
-        c: a db cursor object
-    """
-    cols = ['booth', 'remote', 'scp', 'date', 'time', 'description',
-            'entries', 'exits']
-    iq_tn = dbInsert('turnstiles', cols, '%s,%s,%s,%s,%s,%s,%s,%s', dbtype)
-    if int(filename.split('_')[1].split('.')[0]) < 141018:
-        for line in data:
-            line = line.replace('\x00', '')
-            cols = line.strip().split(',')
-            if (len(cols) - 3) % 5 == 0:
-                keys, vals = cols[:3], cols[3:]
-                # keys: ca/units/scp
-                # + every 5: daten/timen/descn, entriesn/exitsn
-                rows = []
-                for i in range(0, len(vals), 5):
-                    try:
-                        row = (keys + [formatDate(vals[i])] + vals[(i+1):(i+3)]
-                               + [int(j) for j in vals[(i+3):(i+5)]])
-                        if dbtype == 'sqlite':
-                            row = tuple([None] + row)
-                        else:
-                            row = tuple(row)
-                        rows.append(row)
-                    except ValueError as e:
-                        continue
-                if rows:
-                    try:
-                        c.executemany(iq_tn, rows)
-                    except Exception as e:
-                        print(e)
-                        print(filename)
-                        print(rows)
-                        raise
-    else:
-        for line in data[1:]:
-            line = line.replace('\x00', '')
-            cols = line.strip().split(',')
-            if len(cols) == 11:
-                try:
-                    row = (cols[:3] + [formatDate(cols[6])] + cols[7:9]
-                           + [int(i) for i in cols[9:11]])
-                    if dbtype == 'sqlite':
-                        row = tuple([None] + row)
-                    else:
-                        row = tuple(row)
-                    c.execute(iq_tn, row)
-                except ValueError as e:
-                    continue
-    return c
+def search_geocoding(name):
+    ENDPOINT = 'https://maps.googleapis.com/maps/api/geocode/json?address='
+    KEY = 'AIzaSyBUjGbQy8YQwdd0c69WNQq6dl5qXhU5ulI'
+    full = name.replace(" ", "+") + ",+New+York"
+    req = ENDPOINT + full + "&key=" + KEY
+    try:
+        data = json.load(urlopen(req))
+    except HTTPError as he:
+        print(he)
+        raise
+    return data['results'][0]['geometry']['location']

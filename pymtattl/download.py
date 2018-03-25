@@ -334,7 +334,7 @@ class PostgresDownloader(BaseDownloader):
               "exits INTEGER);")
         nk = ("CREATE TABLE IF NOT EXISTS name_keys (" + pk +
               ", remote TEXT, booth TEXT, station TEXT, "
-              "line TEXT, devision TEXT);")
+              "line TEXT, division TEXT);")
         fn = ("CREATE TABLE IF NOT EXISTS file_names (" + pk +
               ", file TEXT);")
         c.execute(tn)
@@ -399,8 +399,8 @@ class PostgresDownloader(BaseDownloader):
                 try:
                     rows = parseRows(fname, data)
                     if rows:
-                        args = ','.join(c.mogrify("(%s,%s,%s,%s,%s,%s,%s,%s)", x).decode('utf-8') for x in rows)
-                        # c.executemany(iq1, rows)
+                        args = ','.join(c.mogrify("(%s,%s,%s,%s,%s,%s,%s,%s)",
+                                        x).decode('utf-8') for x in rows)
                         c.execute("INSERT INTO turnstiles(booth, remote, scp,"
                                   "date, time, description, entries, exits)"
                                   " VALUES" + args)
@@ -430,7 +430,6 @@ class PostgresDownloader(BaseDownloader):
         path, urls = self.init_data(path=path, update=update,
                                     filetype='resource')
         self.init_db()
-        con = self.conn_db()
         if self.local:
             urls = os.path.join(path, urls)
         try:
@@ -448,13 +447,8 @@ class PostgresDownloader(BaseDownloader):
             engine = create_engine(eng)
             res_data.to_sql('name_keys', con=engine,
                             if_exists="replace", index=False)
+            print("Added name_keys file to the database, reset if exists.")
         except Exception as e:
-            if con:
-                con.close()
             print(e)
             raise
-
-        con.commit()
-        con.close()
-        print("Added name_keys file to the database, reset if exists.")
         return
