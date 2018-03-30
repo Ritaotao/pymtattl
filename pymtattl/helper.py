@@ -116,22 +116,23 @@ class PostgresHelper:
                                       "if initial is set to False.")
 
         self.auth_table()
-        con = None
+        self.pd_create_engine()
+        max_id = pd.read_sql_query("SELECT MAX(id) FROM name_keys;",
+                                   con=self.engine).iloc[0, 0] + 1
+        df_nk = pd.DataFrame.from_records(data=nk_list,
+                                          columns=['remote', 'booth',
+                                                   'station', 'line',
+                                                   'division'])
+        df_nk.index = df_nk.index + max_id
+        df_nk.reset_index(inplace=True)
+        df_nk.columns.values[0] = 'id'
         try:
-            con = self.conn_db()
-            c = con.cursor()
-            args = ','.join(c.mogrify("(%s,%s,%s,%s,%s)", x).decode('utf-8')
-                            for x in nk_list)
-            c.execute("INSERT INTO name_keys(remote, booth, station, "
-                      "line, division) VALUES" + args)
-            con.commit()
+            df_nk.to_sql("name_keys", con=self.engine, if_exists='append',
+                         index=False)
             print("Appended name_keys list to name_keys table.")
         except Exception as e:
             print(e)
             raise
-        finally:
-            if con is not None:
-                con.close()
         return
 
     def create_geostations(self):
@@ -185,13 +186,26 @@ class PostgresHelper:
 
     def daily_station_summary(self, start, end, geo=True,
                               create=True, table=''):
+        """Try not to use on entire data set, might have memory limits"""
         self.auth_table()
         self.pd_create_engine()
-        QUERY = ("select * from turnstiles where date >= '{}' and date <= '{}'"
-                 " and description = 'REGULAR';".format(start, end))
-        df = pd.read_sql_query(QUERY, con=self.engine)
         df_nk = pd.read_sql_query("select remote, booth, station from "
                                   "name_keys;", con=self.engine)
+        if notEmptyStr(start) and notEmptyStr(end):
+            QUERY = ("select * from turnstiles where date >= '{}' and "
+                     "date <= '{}' and description = 'REGULAR';"
+                     .format(start, end))
+        elif notEmptyStr(start):
+            QUERY = ("select * from turnstiles where date >= '{}' and "
+                     "description = 'REGULAR';".format(start))
+        elif notEmptyStr(end):
+            QUERY = ("select * from turnstiles where date <= '{}' and "
+                     "description = 'REGULAR';".format(end))
+        else:
+            QUERY = "select * from turnstiles where description = 'REGULAR';"
+
+        df = pd.read_sql_query(QUERY, con=self.engine)
+
         # de-cumulate entry/exit numbers
         df['datime'] = pd.to_datetime(df['date'] + ' ' + df['time'])
         df.drop(['date', 'time', 'description'], axis=1, inplace=True)

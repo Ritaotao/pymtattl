@@ -26,7 +26,7 @@ def sqlite_example():
 
 
 def postgres_example():
-    pm = {'dbname': '',
+    pm = {'dbname': 'mta',
           'user': 'u',
           'password': 'p',
           'host': 'localhost',
@@ -35,14 +35,13 @@ def postgres_example():
                                              dbparms=pm)
 
     postgres_downloader.init_namekeys(path='C:\\Users\\Owner\\Desktop\\'
-                                           'mta\\data',
-                                      update=True)
-
+                                           'mta\\data', update=True)
+    """
     postgres_downloader.download_to_db(path='C:\\Users\\Owner\\Desktop\\'
-                                            'mta\\data',
-                                       update=True)
+                                            'mta\\data', update=True)
+    """
     return
-# postgres_example()
+postgres_example()
 
 
 def postgres_helper_example():
@@ -52,13 +51,16 @@ def postgres_helper_example():
           'host': 'localhost',
           'port': '5432'}
     postgres_helper = PostgresHelper(dbparms=pm)
+
     postgres_helper.append_namekeys(initial=True)
+    """
     miss_stations = postgres_helper.create_geostations()
     for i in miss_stations:
         print(i)
-    df = postgres_helper.daily_station_summary(start="2010-04-17",
-                                               end="2010-04-21",
-                                               geo=True,
-                                               create=True, table='dss41721')
-    return df.head()
-print(postgres_helper_example())
+    df = postgres_helper.daily_station_summary(start=None,
+                                               end=None,
+                                               geo=False,
+                                               create=True, table='daily')
+    return df.head()"""
+    return
+postgres_helper_example()
