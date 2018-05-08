@@ -1,15 +1,21 @@
 import os
 import json
+import numpy as np
+import pandas as pd
 from datetime import datetime
 from urllib.request import urlopen
 from urllib.error import HTTPError
 
 
-def getPubDate(fname):
+def getPubDate(name):
     """
     Return the date (yymmdd) from the data url or file name
     """
-    return int(fname.split('_')[1].split('.')[0])
+    try:
+        date_int = int(name.split('_')[1].split('.')[0])
+    except (IndexError, ValueError):
+        date_int = 0 #as 0 will never be >= any start time
+    return date_int
 
 
 def filterUrls(urls=[], start=None, end=None):
@@ -35,7 +41,8 @@ def formatDate(val):
     """
     for fmt in ('%m-%d-%y', '%m/%d/%Y'):
         try:
-            return datetime.strptime(val, fmt).strftime('%Y-%m-%d')
+            date = datetime.strptime(val, fmt).strftime('%Y-%m-%d')
+            return date
         except ValueError as e:
             pass
     raise ValueError('no valid date format found.')
