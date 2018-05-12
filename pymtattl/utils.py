@@ -1,7 +1,5 @@
 import os
 import json
-import numpy as np
-import pandas as pd
 from datetime import datetime
 from urllib.request import urlopen
 from urllib.error import HTTPError
@@ -11,11 +9,7 @@ def getPubDate(name):
     """
     Return the date (yymmdd) from the data url or file name
     """
-    try:
-        date_int = int(name.split('_')[1].split('.')[0])
-    except (IndexError, ValueError):
-        date_int = 0 #as 0 will never be >= any start time
-    return date_int
+    return int(name.split('_')[1].split('.')[0])
 
 
 def filterUrls(urls=[], start=None, end=None):

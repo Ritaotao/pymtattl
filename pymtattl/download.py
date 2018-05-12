@@ -4,7 +4,7 @@ import os
 from urllib.request import urlopen
 from urllib.error import HTTPError
 from bs4 import BeautifulSoup
-from .utils import (createFolder, parseRows, getPubDate, filterUrls,
+from .utils import (createFolder, parseRows, filterUrls,
                     notEmptyStr, strParms)
 import sqlite3
 import pandas as pd

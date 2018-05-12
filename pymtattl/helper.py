@@ -209,7 +209,7 @@ class PostgresHelper:
         # de-cumulate entry/exit numbers
         df['datime'] = pd.to_datetime(df['date'] + ' ' + df['time'])
         df.drop(['date', 'time', 'description'], axis=1, inplace=True)
-        df.drop_duplicates(keep='first', inplace=True)
+        # df.drop_duplicates(keep='first', inplace=True)
         level = ['remote', 'booth', 'scp']
         df = df.sort_values(by=level + ['datime']).reset_index(drop=True)
         df['entry_diff'] = df.groupby(level)['entries'].diff()

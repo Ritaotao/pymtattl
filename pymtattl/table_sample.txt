@@ -1,0 +1,12 @@
+tables
+
+1. index table
+id | booth | remote | scp
+1, A002, R051, 02-00-00
+
+2. latest table
+index_id | date_time | raw_entries | raw_exits
+1, 2018-05-11 12:00:00, 51875, 59280
+
+3. data table
+index_id | date_time | description | entries | exits
