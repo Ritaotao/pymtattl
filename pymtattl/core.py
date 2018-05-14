@@ -38,13 +38,22 @@ class Cleaner:
         if n == 0:
             raise Exception("No data files found within time window")
         else:
-            print("%d data files found within time window" % n)
+            print("%d available data files within time window" % n)
         self.urls = urls_filtered
         return urls_filtered
 
-    def process(self):
+    def get_raw_txt(self, path=os.getcwd()):
         assert self.urls, "Run get_data_urls first"
-        pass
+        for i, u in enumerate(self.urls):
+            filepath = os.path.join(path, u.split('/')[-1])
+            if not os.path.exists(filepath):
+                data = urlopen(u).read()
+                with open(filepath, 'w+') as f:
+                    f.write(data)
+                if i % 9 == 0:
+                    print("Downloaded %d files..." % (i+1))
+        print("Downloading completed.")
+        return
 
     def to_txt(self, path=os.getcwd()):
         pass
@@ -53,6 +62,7 @@ class Cleaner:
 def read_prior(url):
     """
         Parse mta turnstile data prior to 2014-10-18
+        drop scp
         return pandas dataframe
     """
     data = urlopen(url)
@@ -64,13 +74,13 @@ def read_prior(url):
         if (ncol - 3) % 5 > 0:
             err_count += 1
         else:
-            # keys: ca/units/scp
+            # keys: ca/units
             # + every 5: daten/timen/descn/entriesn/exitsn
-            keys = cols[:3]
+            keys = cols[:2]
             for i in range(3, ncol, 5):
                 row = tuple(keys+cols[i:i+5])
                 rows.append(row)
-    labels = ['booth', 'remote', 'scp', 'date', 'time',
+    labels = ['booth', 'remote', 'date', 'time',
               'description', 'entries', 'exits']
     df = pd.DataFrame.from_records(rows, columns=labels)
     print("%d invalid lines with wrong # columns" % err_count)
@@ -80,21 +90,22 @@ def read_prior(url):
 def read_current(url):
     """
         Parse mta turnstile data current (>= 2014-10-18)
+        drop scp, station, linename, division
         return pandas dataframe
     """
     labels = ['booth', 'remote', 'scp', 'station', 'linename', 'division',
               'date', 'time', 'description', 'entries', 'exits']
-    use = [0, 1, 2, 6, 7, 8, 9, 10]
+    use = [0, 1, 6, 7, 8, 9, 10]
     df = pd.read_table(url, sep=',', header=0, names=labels, usecols=use)
     return df
 
 
 def load_tables(init=True, paths=None):
-    id_dfcols = ['booth', 'remote', 'scp']
+    id_dfcols = ['booth', 'remote']
     lt_dfcols = ['index_id', 'date_time', 'raw_entries', 'raw_exits']
     if isinstance(paths, list) and len(paths) == 2:
         index_df = pd.read_table(paths[0], sep=',', index_col=0,
-                                 names=id_dfcols)
+                                 header=0, names=id_dfcols)
         latest_df = pd.read_table(paths[1], sep=',', names=lt_dfcols)
     elif init is True:
         index_df = pd.DataFrame(columns=id_dfcols)
@@ -105,7 +116,7 @@ def load_tables(init=True, paths=None):
 
 
 def read_urls(urls, init=True, paths=None):
-    id_df, lt_df = load_tables(init, paths)
+    index, latest = load_tables(init, paths)
     for u in urls:
         if utils.getPubDate(u) < 141018:
             df = read_prior(u)
@@ -113,19 +124,18 @@ def read_urls(urls, init=True, paths=None):
             df = read_current(u)
         print("Load into dataframe, start processing...")
 
+        # convert to date_time and integer columns
         df['date'] = df['date'].apply(utils.formatDate)
         df['date_time'] = pd.to_datetime(df['date'] + ' ' + df['time'])
         df.drop(['date', 'time'], axis=1, inplace=True)
         df['entries', 'exits'] = df['entries', 'exits'].applymap(int)
-
-        idcols = ['booth', 'remote', 'scp']
+        # update index table, replace booth,remote with index_id
+        idcols = ['booth', 'remote']
         id_pairs = df[idcols].drop_duplicates()
-        new_pairs = id_pairs.merge(id_df, on=idcols, how='left',
-                                   validate="one_to_one")
-        id_df = id_df.append(new_pairs, ignore_index=True)
-        df = df.merge(id_df.reset_index(level=0), on=idcols, how='left')
+        index = index.append(id_pairs, ignore_index=True).drop_duplicates()
+        df = df.merge(index.reset_index(), on=idcols, how='left')
         df.drop(idcols, axis=1, inplace=True)
-    id_df.to_csv('index_table.txt', index_label='id')
+    index.to_csv('index_table.txt', index_label='id')
     # question: do i really need scp level?
 
 
