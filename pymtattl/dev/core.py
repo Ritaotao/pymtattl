@@ -14,7 +14,7 @@ import re
 import pandas as pd
 from urllib.request import urlopen
 from bs4 import BeautifulSoup
-from datetime import datetime
+from datetime import datetime, timedelta
 import logging
 
 URL = "http://web.mta.info/developers/"
@@ -61,25 +61,26 @@ class Downloader:
     """
     def __init__(self, date_range=('2010-05-05', '2010-05-15'),
                  main_path='./data/'):
-        self.jobname = 'download'
+        self._jobname = 'download'
         self.start_date, self.end_date = date_range
         self.main_path = main_path
-        self.output_path = None
-        self.log_path = None
-        self.constructed = self._construct()
+        self._output_path = None
+        self._log_path = None
+        self._constructed = self._construct()
+        self._urls = []
 
     def _construct(self):
         """before execution, check parameters are all in place"""
         # under main_path, create subfolder download-xxxx and log file inside subfolder
         time_str = datetime.now().strftime("%Y%m%d%H%M%S")
-        self.output_path = os.path.join(self.main_path, self.jobname+'-'+time_str)
-        self.log_path = os.path.join(self.output_path, self.jobname+".log")
+        self._output_path = os.path.join(self.main_path, self._jobname+'-'+time_str)
+        self._log_path = os.path.join(self._output_path, self._jobname+".log")
         if not os.path.isdir(self.main_path):
             os.makedirs(self.main_path)
-        if not os.path.isdir(self.output_path):
-            os.makedirs(self.output_path)
-        createLogger(self.jobname, self.log_path)
-        logger = logging.getLogger(self.jobname)
+        if not os.path.isdir(self._output_path):
+            os.makedirs(self._output_path)
+        createLogger(self._jobname, self._log_path)
+        logger = logging.getLogger(self._jobname)
         try:
             self.start_date = str2intDate(self.start_date)
             self.end_date = str2intDate(self.end_date)
@@ -89,11 +90,29 @@ class Downloader:
             raise
         return True
 
+    def _download(self):
+        """download data from mta web"""
+        logger = logging.getLogger(self._jobname)
+        i = 0
+        for u in self._urls:
+            filepath = os.path.join(self._output_path, u.split('/')[-1])
+            if not os.path.exists(filepath):
+                data = urlopen(URL + u).read()
+                with open(filepath, 'wb+') as f:
+                    f.write(data)
+                i += 1
+                if i % 10 == 0:
+                    logger.info("Downloaded {} files...".format(i))
+            else:
+                logger.info("File exists: {}".format(filepath))
+        logger.info("Complete: download {0} out of {1} files.".format(i, len(self._urls)))
+        return
+
     def run(self):
         """execution phase based on parameters"""
-        urls = getDataAddress(self.start_date, self.end_date, "web", None, self.jobname)
-        downloadData(urls, self.output_path, self.jobname)
-        return self.output_path
+        self.urls = getDataAddress(self.start_date, self.end_date, self._jobname, None)
+        self._download()
+        return self._output_path
 
 
 class Cleaner:
@@ -107,61 +126,52 @@ class Cleaner:
     """
     def __init__(self, date_range=("2010-05-05", "2010-05-15"),
                  input_path='./data/', output_type='sqlite',
-                 config_path=None):
-        self.jobname = 'clean'
+                 dbparam=None):
+        self._jobname = 'clean'
+        self._bulk_process = 10
         self.start_date, self.end_date = date_range
         self.input_path = input_path
-        self.log_path = None
         self.output_type = output_type
-        self.config_path = config_path
-        self.constructed = self._construct()
+        self.dbparam = None
+        self._log_path = None
+        self._constructed = self._construct()
 
     def _construct(self):
         """before execution, check parameters are all in place"""
         # under input_path, create log file
         time_str = datetime.now().strftime("%Y%m%d%H%M%S")
-        self.log_path = os.path.join(self.input_path, self.jobname+"-{}.log".format(time_str))
-        createLogger(self.jobname, self.log_path)
-        logger = logging.getLogger(self.jobname)
+        self._log_path = os.path.join(self.input_path, self._jobname+"-{}.log".format(time_str))
+        createLogger(self._jobname, self._log_path)
+        logger = logging.getLogger(self._jobname)
         try:
             self.start_date = str2intDate(self.start_date)
             self.end_date = str2intDate(self.end_date)
             assert self.start_date <= self.end_date, "Not a valid date range"
             assert self.output_type in ("sqlite","postgres"), "Output_type could only be sqlite, postgres"
-            assert os.path.isfile(self.config_path), "config_path not valid"
         except Exception as e:     
             logger.error(e, exc_info=True)
             raise
         return True
 
-    def execute(self):
+    def run(self):
         """execution phase based on parameters"""
-        assert self.constructed, "Please call construct method first."
-        # step 1: get data location
-        urls = getDataAddress(self.start_date, self.end_date,
-                              self.input_format, self.input_path, None)
-        # step 2: if web, download data, else pass
-        data_paths = downloadData(urls, self.input_path, None)
-        # step 3: if clean, clean data files, else pass
-        if self.output_format == "text":
-            return
-        for dp in data_paths:
-            # df = processData(dp)
-            if self.output_format == "text":
-                print(dp)
-                #df.to_csv(self.output_path, index=False)
+        # get data location
+        files = getDataAddress(self.start_date, self.end_date, self._jobname, self.input_path)
+        # configure database
+        ### placeholder
+        
 
 
-def getDataAddress(int_start_date, int_end_date, input_format, input_path, prefix):
+def getDataAddress(int_start_date, int_end_date, prefix, input_path=None):
     logger = logging.getLogger(prefix)
     """get data urls or paths"""
     urls = []
     data_regex = re.compile(r'^data.*?txt$')
-    if input_format == "web":
+    if input_path:
+        urls = filter(data_regex.search, os.listdir(input_path)) # local
+    else:
         soup = BeautifulSoup(urlopen(URL + "turnstile.html"), "lxml")
-        urls = [u['href'] for u in soup.find_all('a', href=data_regex)]
-    elif input_format == 'local':
-        urls = filter(data_regex.search, os.listdir(input_path))
+        urls = [u['href'] for u in soup.find_all('a', href=data_regex)] # web
     filter_urls = [u for u in urls if parseDate(u) >= int_start_date and parseDate(u) <= int_end_date]
     if not filter_urls:
         logger.error('No data files found within time window')
@@ -170,119 +180,72 @@ def getDataAddress(int_start_date, int_end_date, input_format, input_path, prefi
     return filter_urls
 
 
-def downloadData(urls, output_path, prefix):
-    """download data from mta web"""
-    logger = logging.getLogger(prefix)
-    i = 0
-    for u in urls:
-        filepath = os.path.join(output_path, u.split('/')[-1])
-        if not os.path.exists(filepath):
-            data = urlopen(URL + u).read()
-            with open(filepath, 'wb+') as f:
-                f.write(data)
-            i += 1
-            if i % 10 == 0:
-                logger.info("Downloaded {} files...".format(i))
-        else:
-            logger.info("File exists: {}".format(filepath))
-    logger.info("Complete: download {0} out of {1} files.".format(i, len(urls)))
-
-
-def processData(dp, logger):
+def processData(file, prefix):
     """process downloaded data files
         a. check # columns
         b. combine date and time column, convert type to datetime
         c. convert entry/exit to integer type
         d. return pandas dataframe
     """
-    datevalue = parseDate(dp)
-    filename = os.path.split(dp)[-1]
-    with open(dp, 'r') as f:
+    logger = logging.getLogger(prefix)
+    datevalue = parseDate(file)
+    filename = os.path.split(file)[-1]
+    with open(file, 'rb') as f:
         data = f.read().split('\n')
     rows = []
     for i, line in enumerate(data):
-        if datevalue >= 141018 and i == 0:
-            # post 141018, data file has header, skip first row
+        # post 141018, data file has header, skip first row
+        if datevalue >= 141018 and i == 0:   
             continue
         line = line.replace('\x00', '')
         cols = line.strip().split(',')
         ncol = len(cols)
-        if ((datevalue < 141018 and (ncol - 3) % 5 > 0)
-                or (datevalue >= 141018 and ncol != 11)):
-            # check number of columns in each row
-            logger.debug('File %s line %d: Incorrect number of items (%s)',
-                         filename, i, ncol)
-            continue
         if datevalue < 141018:
-            # keys: ca/units/scp, every 5: daten/timen/descn/entriesn/exitsn
+            if (ncol - 3) % 5 > 0:
+                logger.warning('File {0} line{1}: Incorrect number of columns ({3})'.format(filename, i, ncol))
+                continue               
+            # first 3: ca/units/scp, every 5: daten/timen/descn/entriesn/exitsn
             for j in range(3, ncol, 5):
-                row = processSingleRow(cols[:3], cols, filename, i, j, logger)
+                row = processRow(filename, cols, i, j, prefix)
                 if row:
                     rows.append(row)
                 else:
                     continue
         else:
-            # skip station name columns in the middle
-            row = processSingleRow(cols[:3], cols, filename, i, 6, logger)
+            if ncol != 11:
+                logger.warning('File {0} line{1}: Incorrect number of columns ({3})'.format(filename, i, ncol))
+                continue                 
+            # skip column 3,4,5 of station, linename, division
+            row = processRow(filename, cols, i, 6, logger)
             if row:
                 rows.append(row)
             else:
                 continue
-    labels = ['booth', 'remote', 'scp', 'datetime', 'description',
-              'entries', 'exits']
+    labels = ['ca', 'unit', 'scp', 'timestamp', 'description', 'entry', 'exit']
     df = pd.DataFrame.from_records(rows, columns=labels)
     return df
 
 
-def checkLineItem(datevalue, ncol, file, i):
-    if (datevalue < 141018 and (ncol - 3) % 5 > 0) or (datevalue >= 141018 and ncol != 11):
-        logging.debug('File {} line {}: Incorrect number of items ({})'.format(file, i, ncol))
-        return True
-    else:
-        return False
-
-
-def processDateTime(dt, file, i, j):
+def processRow(filename, cols, i, j, prefix):
+    logger = logging.getLogger(prefix)
+    timestamp = cols[j] + " " + cols[j+1]
     try:
-        dt_formatted = datetime.strptime(dt, '%m-%d-%y %H:%M:%S ').strftime('%Y-%m-%d %H:%M:%S')
+        timestamp = datetime.strptime(timestamp, '%m-%d-%y %H:%M:%S')
     except ValueError:
         try:
-            dt_formatted = datetime.strptime(dt, '%m/%d/%Y %H:%M:%S ').strftime('%Y-%m-%d %H:%M:%S')
+            timestamp = datetime.strptime(timestamp, '%m/%d/%Y %H:%M:%S')
         except ValueError:
-            logging.debug('File {} line {} column {}: Incorrect datetime format ({})'.format(file, i, j, dt))
+            logger.warning('File {0} line {1} column {2}: Incorrect datetime format ({3})'.format(filename, i, j, timestamp))
             return False
-    return dt_formatted.strftime('%Y-%m-%d %H:%M:%S')
-
-
-def processInt(val, file, i, j):
+    timestamp = int((timestamp - datetime(1970, 1, 1)) / timedelta(seconds=1))
+    description = cols[j+2]
     try:
-        val_int = int(val)
-    except:
-        logging.debug('File {} line {} column {}: Incorrect int format ({})'.format(file, i, j, val))
+        entry = int(cols[j+3])
+        exit = int(cols[j+4])
+    except TypeError:
+        logging.debug('File {0} line {1} column {2},{3}: Incorrect int format ({4},{5})'.format(filename, i, j+3, j+4, entry, exit))
         return False
-    return val_int
-
-
-def processSingleRow(keys, cols, filename, i, j, logger):
-    row = []
-    dt = cols[j]+" "+cols[j+1]
-    dt_formatted = processDateTime(dt, filename, i, j)
-    if dt_formatted:
-        row.append(dt_formatted)
-    else:
-        logger.debug('File %s line %d column %d: error datetime format (%s)',
-                     filename, i, j, dt)
-        return False
-    row.append(cols[j+2])
-    for k in [3, 4]:
-        val_int = processInt(cols[k], filename, i, j+k)#, cols[j+k])
-        if val_int:
-            row.append(val_int)
-        else:
-            logger.debug('File %s line %d column %d: error int format (%s)',
-                         filename, i, j, cols[k])
-            return False
-    return tuple(keys+row)
+    return tuple(cols[:3] + [description, entry, exit])
 
 
 if __name__ == "__main__":
