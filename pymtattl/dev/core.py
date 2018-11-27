@@ -16,6 +16,9 @@ from urllib.request import urlopen
 from bs4 import BeautifulSoup
 from datetime import datetime, timedelta
 import logging
+from sqlalchemy_declarative import create_all_table, Device, Turnstile
+from sqlalchemy.orm import sessionmaker
+
 
 URL = "http://web.mta.info/developers/"
 LOGFORMAT = "%(asctime)s [%(threadName)-12.12s] [%(levelname)-5.5s]  %(message)s"
@@ -128,14 +131,14 @@ class Cleaner:
     """
     def __init__(self, date_range=None,
                  input_path='./data/', output_type='sqlite',
-                 dbparam=None):
+                 dbstring='sqlite:///test_data.db'):
         self._jobname = 'clean'
         self._bulk_process = 10
         self.date_range = date_range
         self._start_date, self._end_date = None, None
         self.input_path = input_path
         self.output_type = output_type
-        self.dbparam = None
+        self.dbstring = dbstring
         self._log_path = None
         self._constructed = self._construct()
 
@@ -159,6 +162,11 @@ class Cleaner:
             logger.error(e, exc_info=True)
             raise
         return True
+    
+    def _configDB(self):
+        """configure database connection, initialize tables (xxx) if not exist"""
+        engine = create_all_table(self.dbstring)
+        return engine
 
     def _processFile(self, file):
         """process each data file, return pandas dataframe
@@ -191,7 +199,7 @@ class Cleaner:
                 if ncol != 11:
                     logger.warning('File {0} line{1}: Incorrect number of columns ({2})'.format(datevalue, i, ncol))
                 else:               
-                    # skip column 3,4,5 of station, linename, division
+                    # skip column 3,4,5 (station, linename, division)
                     row = processRow(datevalue, cols, i, 6, self._jobname)
                     if row:
                         rows.append(row)
@@ -205,11 +213,17 @@ class Cleaner:
         # get data location
         files = getDataAddress(self._start_date, self._end_date, self._jobname, self.input_path)
         # configure database
-        ### placeholder
+        engine = self._configDB()
+        Session = sessionmaker(bind=engine)
+        session = Session()
+        query_device = session.query(Device)
+        df_device = data_frame(query_device, [c.name for c in Device.__table__.columns])
         # process files
-        for f in files:
+        for f in files[:1]:
             df = self._processFile(f)
+            device_pairs = df[['ca', 'unit', 'scp']].drop_duplicates()
             print(df.head(3))
+
 
 
 def getDataAddress(start_date, end_date, prefix, input_path=None):
@@ -253,6 +267,15 @@ def processRow(filename, cols, i, j, prefix):
         logging.warning('File {0} line {1} column {2},{3}: Incorrect int format ({4},{5})'.format(filename, i, j+3, j+4, entry, exit))
         return False
     return tuple(cols[:3] + [timestamp, description, entry, exit])
+
+
+def data_frame(query, columns):
+    """http://danielweitzenfeld.github.io/passtheroc/blog/2014/10/12/datasci-sqlalchemy/
+    Takes a sqlalchemy query and a list of columns, returns a dataframe.
+    """
+    def make_row(x):
+        return dict([(c, getattr(x, c)) for c in columns])
+    return pd.DataFrame([make_row(x) for x in query])
 
 
 if __name__ == "__main__":

@@ -27,3 +27,4 @@ def create_all_table(engine_string='sqlite:///test_data.db'):
     # Create all tables in the engine. Equivalent to "Creat Table" in raw SQL.
     engine = create_engine(engine_string)
     Base.metadata.create_all(engine)
+    return engine
