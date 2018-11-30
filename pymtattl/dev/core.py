@@ -16,7 +16,7 @@ from urllib.request import urlopen
 from bs4 import BeautifulSoup
 from datetime import datetime, timedelta
 import logging
-from sqlalchemy_declarative import create_all_table, Device, Turnstile
+from sqlalchemy_declarative import create_all_table, Device, Turnstile, get_one_or_create
 from sqlalchemy.orm import sessionmaker
 
 
@@ -205,6 +205,7 @@ class Cleaner:
                         rows.append(row)
         labels = ['ca', 'unit', 'scp', 'timestamp', 'description', 'entry', 'exit']
         df = pd.DataFrame.from_records(rows, columns=labels)
+        df = df.sort_values(by=['ca', 'unit', 'scp', 'timestamp']).set_index(['ca', 'unit', 'scp'])
         logger.info('Finish processing: File {0}'.format(datevalue))
         return df
 
@@ -216,14 +217,30 @@ class Cleaner:
         engine = self._configDB()
         Session = sessionmaker(bind=engine)
         session = Session()
-        query_device = session.query(Device)
-        df_device = data_frame(query_device, [c.name for c in Device.__table__.columns])
         # process files
         for f in files[:1]:
             df = self._processFile(f)
-            device_pairs = df[['ca', 'unit', 'scp']].drop_duplicates()
-            print(df.head(3))
-
+            # insert new ca,unit,scp pair to db and index df
+            for idx in df.index.unique():
+                obj, exists = get_one_or_create(session, Device, ca=idx[0], unit=idx[1], scp=idx[2])
+                df.loc[idx, 'device_id'] = int(obj.id)
+            ### diff step
+            ### output df last row for each index as temp_latest
+            ### get entire latest table
+            ### df left join with latest table (keep only index in df)
+            ### if timestamp left > timestamp right, left entry/exit - right entry/exit (prob write <0 rows to log)
+            ### temp_latest right join latest, overwrite entry/exit if not Nah, save latest to db
+            ### diff df
+            df_lor = df.to_dict(orient='records')
+            try:
+                session.execute(
+                    Turnstile.__table__.insert(),
+                    df_lor
+                )
+                session.commit()
+            except:
+                session.rollback()
+        session.close()
 
 
 def getDataAddress(start_date, end_date, prefix, input_path=None):
