@@ -16,7 +16,7 @@ from urllib.request import urlopen
 from bs4 import BeautifulSoup
 from datetime import datetime, timedelta
 import logging
-from sqlalchemy_declarative import create_all_table, Device, Turnstile, get_one_or_create
+from sqlalchemy_declarative import create_all_table, Device, Turnstile, Previous, get_one_or_create, data_frame
 from sqlalchemy.orm import sessionmaker
 
 
@@ -220,15 +220,26 @@ class Cleaner:
         # process files
         for f in files[:1]:
             df = self._processFile(f)
+            file_date = parseDate(f)
             # insert new ca,unit,scp pair to db and index df
             for idx in df.index.unique():
                 obj, exists = get_one_or_create(session, Device, ca=idx[0], unit=idx[1], scp=idx[2])
                 df.loc[idx, 'device_id'] = int(obj.id)
-            ### diff step
-            ### output df last row for each index as temp_latest
-            ### get entire latest table
-            ### df left join with latest table (keep only index in df)
-            ### if timestamp left > timestamp right, left entry/exit - right entry/exit (prob write <0 rows to log)
+            df = df.reset_index(drop=True)
+            # diff step
+            ## output df last row for each index as temp_last ('device id', 'timestamp', 'description', 'entry', 'exit')
+            df_temp_prev = df.groupby('device_id').last().reset_index()
+            df_temp_prev['file_date'] = file_date
+            ## get entire last df from db
+            df_prev = data_frame(session.query(Previous), [c.name for c in Previous.__table__.columns])
+            df_prev['date_diff'] = (pd.to_datetime(df_prev['file_date'], format="%y%m%d") - pd.to_datetime(file_date, format="%y%m%d")).dt.days
+            ## df left join with latest table (keep only index in df)
+            df = df.merge(df_prev, how='left', on='device_id')
+            ## if df_prev dt_diff == -7, update using left entry/exit - right entry/exit
+            df_update = df[df['date_diff'] == -7]
+            df_update['entry_x'] = df_update['entry_x'] - df_update['entry_y']
+            df_update['exit_x'] = df_update['exit_x'] - df_update['exit_y']
+            #df_rest = 
             ### temp_latest right join latest, overwrite entry/exit if not Nah, save latest to db
             ### diff df
             df_lor = df.to_dict(orient='records')
@@ -253,6 +264,7 @@ def getDataAddress(start_date, end_date, prefix, input_path=None):
         soup = BeautifulSoup(urlopen(URL + "turnstile.html"), "lxml")
         urls = [u['href'] for u in soup.find_all('a', href=data_regex)] # web
     if (prefix == 'clean') and (start_date is None) and (end_date is None):
+        # during cleaning, when start/end date not specified, reading all files in folder
         filter_urls = list(urls)
     else:
         filter_urls = [u for u in urls if parseDate(u) >= start_date and parseDate(u) <= end_date]
@@ -284,15 +296,6 @@ def processRow(filename, cols, i, j, prefix):
         logging.warning('File {0} line {1} column {2},{3}: Incorrect int format ({4},{5})'.format(filename, i, j+3, j+4, entry, exit))
         return False
     return tuple(cols[:3] + [timestamp, description, entry, exit])
-
-
-def data_frame(query, columns):
-    """http://danielweitzenfeld.github.io/passtheroc/blog/2014/10/12/datasci-sqlalchemy/
-    Takes a sqlalchemy query and a list of columns, returns a dataframe.
-    """
-    def make_row(x):
-        return dict([(c, getattr(x, c)) for c in columns])
-    return pd.DataFrame([make_row(x) for x in query])
 
 
 if __name__ == "__main__":

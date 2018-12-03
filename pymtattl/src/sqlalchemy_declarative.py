@@ -1,5 +1,6 @@
 import os
 import sys
+import pandas as pd
 from sqlalchemy import Column, ForeignKey, Integer, String
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship
@@ -25,13 +26,15 @@ class Turnstile(Base):
     entry = Column(Integer, nullable=False)
     exit = Column(Integer, nullable=False)
 
-class Latest(Base):
+class Previous(Base):
     __tablename__ = 'latest'
     id = Column(Integer, primary_key=True)
     device_id = Column(Integer, ForeignKey('device.id'))
     timestamp = Column(Integer, nullable=False)
+    description = Column(String(250))
     entry = Column(Integer, nullable=False)
     exit = Column(Integer, nullable=False)
+    file_date = Column(Integer, nullable=False)
 
 def create_all_table(engine_string='sqlite:///test_data.db'):
     # Create all tables in the engine. Equivalent to "Creat Table" in raw SQL.
@@ -60,3 +63,12 @@ def get_one_or_create(session,
         except IntegrityError:
             session.rollback()
             return session.query(model).filter_by(**kwargs).one(), False
+
+
+def data_frame(query, columns):
+    """http://danielweitzenfeld.github.io/passtheroc/blog/2014/10/12/datasci-sqlalchemy/
+    Takes a sqlalchemy query and a list of columns, returns a dataframe.
+    """
+    def make_row(x):
+        return dict([(c, getattr(x, c)) for c in columns])
+    return pd.DataFrame([make_row(x) for x in query])
