@@ -232,6 +232,7 @@ class Cleaner:
             df_temp_prev['file_date'] = file_date
             ## get entire last df from db
             df_prev = data_frame(session.query(Previous), [c.name for c in Previous.__table__.columns])
+            ## get records 1) appeared in last week file 2) device_id within current week file
             df_prev['date_diff'] = (pd.to_datetime(df_prev['file_date'], format="%y%m%d") - pd.to_datetime(file_date, format="%y%m%d")).dt.days
             ## df left join with latest table (keep only index in df)
             df = df.merge(df_prev, how='left', on='device_id')
