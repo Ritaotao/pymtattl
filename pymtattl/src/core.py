@@ -220,38 +220,52 @@ class Cleaner:
         # process files
         for f in files[:1]:
             df = self._processFile(f)
-            file_date = parseDate(f)
+            int_file_date = parseDate(f)
             # insert new ca,unit,scp pair to db and index df
             for idx in df.index.unique():
                 obj, exists = get_one_or_create(session, Device, ca=idx[0], unit=idx[1], scp=idx[2])
                 df.loc[idx, 'device_id'] = int(obj.id)
             df = df.reset_index(drop=True)
-            # diff step
-            ## output df last row for each index as temp_last ('device id', 'timestamp', 'description', 'entry', 'exit')
-            df_temp_prev = df.groupby('device_id').last().reset_index()
-            df_temp_prev['file_date'] = file_date
-            ## get entire last df from db
+            # diff step: include last week last record per device_id to perform decumulate operation across weekly files
+            ## output last row for each device_id ('device id', 'timestamp', 'description', 'entry', 'exit')
+            df_prev_new = df.groupby('device_id').last().reset_index()
+            df_prev_new['file_date'] = int_file_date
+            ## get entire last_df from db
             df_prev = data_frame(session.query(Previous), [c.name for c in Previous.__table__.columns])
-            ## get records 1) appeared in last week file 2) device_id within current week file
-            df_prev['date_diff'] = (pd.to_datetime(df_prev['file_date'], format="%y%m%d") - pd.to_datetime(file_date, format="%y%m%d")).dt.days
-            ## df left join with latest table (keep only index in df)
-            df = df.merge(df_prev, how='left', on='device_id')
-            ## if df_prev dt_diff == -7, update using left entry/exit - right entry/exit
-            df_update = df[df['date_diff'] == -7]
-            df_update['entry_x'] = df_update['entry_x'] - df_update['entry_y']
-            df_update['exit_x'] = df_update['exit_x'] - df_update['exit_y']
-            #df_rest = 
-            ### temp_latest right join latest, overwrite entry/exit if not Nah, save latest to db
-            ### diff df
-            df_lor = df.to_dict(orient='records')
+            if not df_prev.empty:
+                ## attach this week last records to part of df_prev, which will be the new df_prev for next week
+                df_prev.drop(['id'], axis=1, inplace=True) # drop primary key
+                df_rest = df_prev.loc[~df_prev['device_id'].isin(df['device_id']), :].copy()
+                df_prev_new = pd.concat([df_prev_new, df_rest], axis=0)
+                ## convert file_date column to datetime since date subtraction is not valid in integer type across years
+                ## select records 1) appeared in last week file 2) has device_id within current week file
+                df_prev['file_date'] =  pd.to_datetime(df_prev['file_date'], format="%y%m%d")
+                df_prev['last_week'] = ((df_prev['file_date'] - pd.to_datetime(int_file_date, format="%y%m%d")).dt.days == -7)
+                df_update = df_prev.loc[(df_prev['last_week']) & (df_prev['device_id'].isin(df['device_id'].unique())), :].copy()
+                df_update.drop(['file_date', 'last_week'], axis=1, inplace=True)
+                df = pd.concat([df, df_update], axis=0)
+            ## decumulate step
+            levelset = ['device_id', 'timestamp']
+            df = df.sort_values(levelset).reset_index(drop=True)
+            df['entry'] = df.groupby(levelset)['entry'].diff()
+            df['exit'] = df.groupby(levelset)['exit'].diff()
+            # might have negative values due to reasons ie. counter reset, etc, set to zero
+            df.loc[df['entry'] < 0, 'entry'] = 0
+            df.loc[df['exit'] < 0, 'exit'] = 0
+            # remove first rows (with NAs) after diff
+            df.dropna(axis=0, how='any', inplace=False)
+            ## check out decumulated data and new df_prev
+            df = df.to_dict(orient='records')
             try:
                 session.execute(
                     Turnstile.__table__.insert(),
-                    df_lor
+                    df
                 )
                 session.commit()
+                df_prev_new.to_sql('Previous', con=engine, if_exists='replace', index=False)
             except:
                 session.rollback()
+                print("Error: DB Checkout incomplete.")
         session.close()
 
 
@@ -269,6 +283,7 @@ def getDataAddress(start_date, end_date, prefix, input_path=None):
         filter_urls = list(urls)
     else:
         filter_urls = [u for u in urls if parseDate(u) >= start_date and parseDate(u) <= end_date]
+        filter_urls.sort() # need to be sorted to make the decumulate step easier
     if not filter_urls:
         logger.error('Complete: No data files found within time window.')
         sys.exit(1)
