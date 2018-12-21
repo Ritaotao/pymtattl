@@ -10,9 +10,19 @@ from sqlalchemy.exc import IntegrityError
 
 Base = declarative_base()
 
+"""
+need to add in station table
+class Station(Base):
+    __tablename__ = 'station'
+    id = Column(Integer, primary_key=True)
+    ca = Column(String(250), nullable=False)
+    unit = Column(String(250), nullable=False)
+"""
+
 class Device(Base):
     __tablename__ = 'device'
     id = Column(Integer, primary_key=True)
+    # station_id = Column(Integer, ForeignKey('station.id'))
     ca = Column(String(250), nullable=False)
     unit = Column(String(250), nullable=False)
     scp = Column(String(250), nullable=False)
@@ -27,7 +37,7 @@ class Turnstile(Base):
     exit = Column(Integer, nullable=False)
 
 class Previous(Base):
-    __tablename__ = 'latest'
+    __tablename__ = 'previous'
     id = Column(Integer, primary_key=True)
     device_id = Column(Integer, ForeignKey('device.id'))
     timestamp = Column(Integer, nullable=False)
