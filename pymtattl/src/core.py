@@ -1,23 +1,22 @@
 """
     ETL for New York turnstiles entries and exits data files from MTA webpage
-    1. Download unprocessed txt files to local (input_path)
-    2. (If output_type = None) End.
-       (If output_type = "text") tabular, cleaned csv files (not merged).
-       (If output_type = "sqlite"/"postgres") normalize at booth, remote level;
-            find last_row_table to compute diff of cumulative sum.
+    1. Download unprocessed txt data files
+    2. Output decumulated, normalized data to database
 """
 
 from __future__ import absolute_import, print_function, unicode_literals
 import os
 import sys
 import re
-import pandas as pd
-from urllib.request import urlopen
-from bs4 import BeautifulSoup
-from datetime import datetime, timedelta
 import logging
-from sqlalchemy_declarative import create_all_table, Device, Turnstile, Previous, get_one_or_create, data_frame
+import pandas as pd
+from bs4 import BeautifulSoup
+from urllib.request import urlopen
+from datetime import datetime, timedelta
+from sqlalchemy_declarative import (Station, Device, Turnstile, Previous, 
+                                    create_all_table, get_one_or_create, data_frame)
 from sqlalchemy.orm import sessionmaker
+from sqlalchemy.types import INTEGER
 
 
 URL = "http://web.mta.info/developers/"
@@ -45,15 +44,6 @@ def str2intDate(datetext):
 def parseDate(name):
     """return date part (yymmdd) given data url or file name"""
     return int(name.split('_')[-1].split('.')[0])
-
-
-
-def setPath(main_path, prefix='download'):
-    """return output path and logfile path"""
-    time_str = datetime.now().strftime("%Y%m%d%H%M%S")
-    output_path = os.path.join(main_path, prefix+'-'+time_str)
-    log_path = os.path.join(output_path, prefix + ".log")
-    return output_path, log_path
 
 
 class Downloader:
@@ -127,25 +117,28 @@ class Cleaner:
         Take in job requirements:
             date range: (start_date(str), end_date(str)),
             input_path (required, read raw text files): directory(str),
-            output_type: "sqlite"|"postgres",
-            config_path (json file path including database connection parameters): dir(str)
+            dbstring: database urls used by sqlalchemy(str);
+                dialect+driver://username:password@host:port/database
+                postgres: 'postgresql://scott:tiger@localhost/mydatabase'
+                mysql: 'mysql://scott:tiger@localhost/foo'
+                sqlite: 'sqlite:///foo.db'
+                (more info could found here: https://docs.sqlalchemy.org/en/latest/core/engines.html#postgresql)
     """
     def __init__(self, date_range=None,
-                 input_path='./data/', output_type='sqlite',
-                 dbstring='sqlite:///test_data.db'):
+                 input_path='./data/',
+                 dbstring='sqlite:///mta_sample.db'):
         self._jobname = 'clean'
         self._bulk_process = 10
         self.date_range = date_range
         self._start_date, self._end_date = None, None
         self.input_path = input_path
-        self.output_type = output_type
         self.dbstring = dbstring
         self._log_path = None
         self._constructed = self._construct()
 
     def _construct(self):
         """before execution, check parameters are all in place"""
-        # under input_path, create log file
+        # create log file under input path
         time_str = datetime.now().strftime("%Y%m%d%H%M%S")
         self._log_path = os.path.join(self.input_path, self._jobname+"-{}.log".format(time_str))
         createLogger(self._jobname, self._log_path)
@@ -158,7 +151,6 @@ class Cleaner:
                 logger.info("Use data files between {0} and {1}".format(self._start_date, self._end_date))
             else:
                 logger.info("No date range specified, use all data files in folder")
-            assert self.output_type in ("sqlite","postgres"), "Output_type could only be sqlite, postgres"
         except Exception as e:     
             logger.error(e, exc_info=True)
             raise
@@ -166,8 +158,14 @@ class Cleaner:
     
     def _configDB(self):
         """configure database connection, initialize tables (xxx) if not exist"""
-        engine = create_all_table(self.dbstring)
-        return engine
+        logger = logging.getLogger(self._jobname)
+        try:
+            engine = create_all_table(self.dbstring)
+            logger.info('Connected to db using {}'.format(self.dbstring))
+            return engine
+        except Exception as e:
+            logger.error('Failed to connect to db.\n{}'.format(e))
+            sys.exit(1)
 
     def _processFile(self, file):
         """process each data file, return pandas dataframe
@@ -225,8 +223,9 @@ class Cleaner:
             int_file_date = parseDate(f)
             # insert new ca,unit,scp pair to db and index df
             for idx in df.index.unique():
-                obj, exists = get_one_or_create(session, Device, ca=idx[0], unit=idx[1], scp=idx[2])
-                df.loc[idx, 'device_id'] = int(obj.id)
+                station, exist1 = get_one_or_create(session, Station, ca=idx[0], unit=idx[1])
+                device, exist2 = get_one_or_create(session, Device, station_id=int(station.id), scp=idx[2])
+                df.loc[idx, 'device_id'] = int(device.id)
             df = df.reset_index(drop=True) # drop index: ca,unit,scp, keep: device_id, timestamp description, entry, exit
             # diff step: include last week last record per device_id to perform decumulate operation across weekly files
             ## output last row for each device_id
@@ -266,7 +265,7 @@ class Cleaner:
                 )
                 session.commit()
                 df_prev_new.index.names = ['id']
-                df_prev_new.to_sql('previous', con=engine, if_exists='replace')
+                df_prev_new.to_sql('previous', con=engine, if_exists='replace',dtype={'device_id': INTEGER()})
             except Exception as e:
                 logging.error("Unexpected exception happened while write to db, error detail:\n {}".format(e))
                 session.rollback()
@@ -311,6 +310,7 @@ def processRow(filename, cols, i, j, prefix):
         except ValueError:
             logger.warning('File {0} line {1} column {2}: Incorrect datetime format ({3})'.format(filename, i, j, timestamp))
             return False
+    # convert datetime to integer (seconds since epoch)
     timestamp = int((timestamp - datetime(1970, 1, 1)) / timedelta(seconds=1))
     description = cols[j+2]
     try:
@@ -325,7 +325,8 @@ def processRow(filename, cols, i, j, prefix):
 if __name__ == "__main__":
     #download = Downloader(date_range=("2014-08-01", "2014-08-10"))
     #data_paths = download.run()
-    clean = Cleaner(input_path='./data/download-20181221154729/')
+    clean = Cleaner(input_path='./data/download-20181221154729/',
+                    dbstring='postgresql://user:password@localhost:5432/mta_sample')
     clean.run()
     print("Example complete.")
 
