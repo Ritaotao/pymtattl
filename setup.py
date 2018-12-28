@@ -7,23 +7,21 @@ def read(fname):
 
 
 setup(name='pymtattl',
-      packages=['pymtattl'],
-      version='0.1.4',
-      license='MIT',
-      author='Ritaotao',
-      author_email='ritaotao28@gmail.com',
+      version='1.0.0',
       description='Download and store MTA turnstile data',
       long_description=read('README.md'),
+      long_description_content_type="text/markdown",
       url='https://github.com/Ritaotao/pymtattl',
-      download_url='https://github.com/Ritaotao/pymtattl/archive/0.1.3.tar.gz',
-      install_requires=['beautifulsoup4', 'pandas', 'psycopg2'],
-      keywords=['mta', 'data', 'traffic'],
+      author='Ritaotao',
+      author_email='ritaotao28@gmail.com',
+      license='MIT',    
+      keywords=['mta', 'turnstile', 'data', 'traffic'],
       classifiers=[
         'Programming Language :: Python :: 3',
-        'Development Status :: 2 - Pre-Alpha',
-        'Operating System :: Microsoft :: Windows',
         'Topic :: Database',
         'Topic :: Utilities',
         'Topic :: Education',
-        ]
+      ],
+      packages=['pymtattl'],
+      install_requires=['beautifulsoup4', 'pandas', 'sqlalchemy'],
       )
