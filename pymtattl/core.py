@@ -13,7 +13,7 @@ import pandas as pd
 from bs4 import BeautifulSoup
 from urllib.request import urlopen
 from datetime import datetime, timedelta
-from sqlalchemy_declarative import (Station, Device, Turnstile, Previous, 
+from .sqlalchemy_declarative import (Station, Device, Turnstile, Previous, 
                                     create_all_table, get_one_or_create, data_frame)
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.types import INTEGER
@@ -52,13 +52,15 @@ class Downloader:
         Take in job requirements:
             date range: (start_date(str), end_date(str)),
             main_path (required, store data files): directory(str),
+            verbose
     """
-    def __init__(self, date_range=('2010-05-05', '2010-05-15'),
-                 main_path='./data/'):
+    def __init__(self, date_range=("2018-01-01", "2018-02-01"),
+                 main_path='./data/', verbose=10):
         self._jobname = 'download'
         self.date_range = date_range
         self._start_date, self._end_date = None, None
         self.main_path = main_path
+        self.verbose = int(verbose)
         self._output_path = None
         self._log_path = None
         self._constructed = self._construct()
@@ -79,8 +81,8 @@ class Downloader:
         try:
             self._start_date = str2intDate(self.date_range[0])
             self._end_date = str2intDate(self.date_range[1])
-            assert self._start_date <= self._end_date, "Not a valid date range"
-            logger.info("Download data between {0} and {1}".format(self._start_date, self._end_date))
+            assert self._start_date <= self._end_date, "Not a valid date range."
+            logger.info("Download data between {0} and {1}.".format(self._start_date, self._end_date))
         except Exception as e:     
             logger.error(e, exc_info=True)
             raise
@@ -89,6 +91,7 @@ class Downloader:
     def _download(self):
         """download data from mta web"""
         logger = logging.getLogger(self._jobname)
+        logger.info("Start downloading process.")
         i = 0
         for u in self._urls:
             filepath = os.path.join(self._output_path, u.split('/')[-1])
@@ -97,11 +100,11 @@ class Downloader:
                 with open(filepath, 'wb+') as f:
                     f.write(data)
                 i += 1
-                if i % 10 == 0:
+                if (self.verbose != 0) and (i % self.verbose == 0):
                     logger.info("Downloaded {} files...".format(i))
             else:
                 logger.info("File exists: {}".format(filepath))
-        logger.info("Complete: download {0} out of {1} files.".format(i, len(self._urls)))
+        logger.info("Complete: downloaded {0} out of {1} files.".format(i, len(self._urls)))
         return
 
     def run(self):
@@ -122,13 +125,12 @@ class Cleaner:
                 postgres: 'postgresql://scott:tiger@localhost/mydatabase'
                 mysql: 'mysql://scott:tiger@localhost/foo'
                 sqlite: 'sqlite:///foo.db'
-                (more info could found here: https://docs.sqlalchemy.org/en/latest/core/engines.html#postgresql)
+                (more info could be found here: https://docs.sqlalchemy.org/en/latest/core/engines.html#postgresql)
     """
     def __init__(self, date_range=None,
                  input_path='./data/',
                  dbstring='sqlite:///mta_sample.db'):
         self._jobname = 'clean'
-        self._bulk_process = 10
         self.date_range = date_range
         self._start_date, self._end_date = None, None
         self.input_path = input_path
@@ -147,10 +149,10 @@ class Cleaner:
             if self.date_range:
                 self._start_date = str2intDate(self.date_range[0])
                 self._end_date = str2intDate(self.date_range[1])
-                assert self._start_date <= self._end_date, "Not a valid date range"
-                logger.info("Use data files between {0} and {1}".format(self._start_date, self._end_date))
+                assert self._start_date <= self._end_date, "Not a valid date range."
+                logger.info("Use data files between {0} and {1}.".format(self._start_date, self._end_date))
             else:
-                logger.info("No date range specified, use all data files in folder")
+                logger.info("No date range specified, use all data files in folder.")
         except Exception as e:     
             logger.error(e, exc_info=True)
             raise
@@ -161,10 +163,10 @@ class Cleaner:
         logger = logging.getLogger(self._jobname)
         try:
             engine = create_all_table(self.dbstring)
-            logger.info('Connected to db using {}'.format(self.dbstring))
+            logger.info('Connected to dababase')
             return engine
         except Exception as e:
-            logger.error('Failed to connect to db.\n{}'.format(e))
+            logger.error('Failed to connect to database.\n{}'.format(e))
             sys.exit(1)
 
     def _processFile(self, file):
@@ -187,7 +189,7 @@ class Cleaner:
             ncol = len(cols)
             if datevalue < 141018:
                 if (ncol - 3) % 5 > 0:
-                    logger.warning('File {0} line{1}: Incorrect number of columns ({2})'.format(datevalue, i, ncol))
+                    logger.warning('File {0} line{1}: Incorrect number of columns ({2}).'.format(datevalue, i, ncol))
                 else:
                     # first 3: ca/units/scp, every 5: daten/timen/descn/entriesn/exitsn
                     for j in range(3, ncol, 5):
@@ -196,7 +198,7 @@ class Cleaner:
                             rows.append(row)
             else:
                 if ncol != 11:
-                    logger.warning('File {0} line{1}: Incorrect number of columns ({2})'.format(datevalue, i, ncol))
+                    logger.warning('File {0} line{1}: Incorrect number of columns ({2}).'.format(datevalue, i, ncol))
                 else:               
                     # skip column 3,4,5 (station, linename, division)
                     row = processRow(datevalue, cols, i, 6, self._jobname)
@@ -218,7 +220,7 @@ class Cleaner:
         Session = sessionmaker(bind=engine)
         session = Session()
         # process files
-        for f in files[:2]:
+        for f in files:
             df = self._processFile(f)
             int_file_date = parseDate(f)
             # insert new ca,unit,scp pair to db and index df
@@ -264,8 +266,10 @@ class Cleaner:
                     df
                 )
                 session.commit()
+                logger.info("Complete: new week turnstile data inserted into table.")
                 df_prev_new.index.names = ['id']
                 df_prev_new.to_sql('previous', con=engine, if_exists='replace',dtype={'device_id': INTEGER()})
+                logger.info("Complete: table Previous updated.")
             except Exception as e:
                 logging.error("Unexpected exception happened while write to db, error detail:\n {}".format(e))
                 session.rollback()
@@ -294,7 +298,7 @@ def getDataAddress(start_date, end_date, prefix, input_path=None):
         sys.exit(1)
     else:
         filter_urls.sort() # need to be sorted to make the decumulate step easier
-        logger.info('{} available data files within time window'.format(len(filter_urls)))
+        logger.info('{} available data files within time window.'.format(len(filter_urls)))
         return filter_urls
 
 
@@ -308,7 +312,7 @@ def processRow(filename, cols, i, j, prefix):
         try:
             timestamp = datetime.strptime(timestamp, '%m/%d/%Y %H:%M:%S')
         except ValueError:
-            logger.warning('File {0} line {1} column {2}: Incorrect datetime format ({3})'.format(filename, i, j, timestamp))
+            logger.warning('File {0} line {1} column {2}: Incorrect datetime format ({3}).'.format(filename, i, j, timestamp))
             return False
     # convert datetime to integer (seconds since epoch)
     timestamp = int((timestamp - datetime(1970, 1, 1)) / timedelta(seconds=1))
@@ -317,16 +321,7 @@ def processRow(filename, cols, i, j, prefix):
         entry = int(cols[j+3])
         exit = int(cols[j+4])
     except TypeError:
-        logging.warning('File {0} line {1} column {2},{3}: Incorrect int format ({4},{5})'.format(filename, i, j+3, j+4, entry, exit))
+        logging.warning('File {0} line {1} column {2},{3}: Incorrect int format ({4},{5}).'.format(filename, i, j+3, j+4, entry, exit))
         return False
     return tuple(cols[:3] + [timestamp, description, entry, exit])
-
-
-if __name__ == "__main__":
-    #download = Downloader(date_range=("2014-08-01", "2014-08-10"))
-    #data_paths = download.run()
-    clean = Cleaner(input_path='./data/download-20181221154729/',
-                    dbstring='postgresql://user:password@localhost:5432/mta_sample')
-    clean.run()
-    print("Example complete.")
 

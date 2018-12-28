@@ -2,12 +2,16 @@
 
 ## Introduction
 
-Download and store MTA Turnstile Data
-
-Automate downloading turnstile entry/exit data from MTA website. Save as text files, or directly write to a SQLite/Postgres Database. Can also specify a requested time frame as the earliest files went back to 2010.
-
 MTA Turnstile Data: http://web.mta.info/developers/turnstile.html
 
+Download, process, and store MTA Turnstile Data in database
+
+* `Downloader` class: automate downloading turnstile raw entry/exit data from MTA website into txt files (weekly, cumulated)
+* `Cleaner` class: convert downloaded text files and write decumulated records to database.
+
+Note 1: trying to be database agnostic, used sqlalchemy and tested with sqlite and postgres 10.
+
+Note 2: be cautious about date range of files need to be appended to the database tables, avoid duplication or adding data of weeks prior to the ones in the tables.
 
 ## Table of Contents
 
@@ -15,11 +19,7 @@ MTA Turnstile Data: http://web.mta.info/developers/turnstile.html
 
 * [Download](#download)
 
-  * [Text Files](#text-files)
-
-  * [SQLite Database](#sqlite-database)
-
-  * [Postgres Database](#postgres-database)
+* [Clean](#clean)
 
 * [Caveats](#caveats)
 
@@ -32,114 +32,81 @@ MTA Turnstile Data: http://web.mta.info/developers/turnstile.html
 ## Requirements
 
 * Written for Python 3! Feel free to test and contribute using Python 2!
-* Requires bs4, pandas, psycopg2
+* Requires bs4, pandas, sqlalchemy
 
-## Download Methods
+## Download
 
-### Text Files
+`Downloader`: download data within date range as weekly text files.
 
-BaseDownloader: Download requested data as separate **text files**
+    from pymtattl import Downloader
 
-    from pymtattl.download import BaseDownloader
-    base_downlowder = BaseDownloader(start=141018, end=None)    
-    dat_dir = base_downloader.download_to_txt(path='data', keep_urls=False)  
+    download = Downloader(date_range=("2018-01-01", "2018-02-01"),
+                          main_path='./data/',
+                          verbose=10)
+    data_path = download.run()
 
-* `start/end`: *integer or None*
-  - Define the date range to pull data files *(recommend testing with small date ranges, as downloading all files might be slow)*
-  - Example (yymmdd) for 2014-10-18: `141018`
+* `date_range`: *tuple*
+  - Define the start and end dates *(recommend testing with small date ranges, as downloading all files might be slow)*
+  - Example (yyyy-mm-dd): `("2018-01-01", "2018-02-01")`
 
-* `path`: *string*
-  - An existing directory to save downloaded data files
-  - Can also put an empty string (to save under current working directory) or a new folder name (ie. 'data')
+* `main_path`: *string*, default './data/'
+  - A directory to store downloaded data files (will be created if dir not exists)
+  - Every run creates a new dir `download-yyyymmddhhmmss`, where all data files and log files are nested under
 
-* `keep_urls`: *boolean*
-  - If true will include retrieved urls in **data_urls.txt** under provided directory
+* `verbose`: *int*, default 10
+  - Log and print out when every n files are downloaded
 
-* Returns data folder directory
+* Returns full directory of parent folder `download-yyyymmddhhmmss`
 
-### SQLite Database
+## Clean
 
-SqliteDownloader: Reformat data either from **local path** or directly downloaded from MTA website and save in a SQLite database
+`Cleaner`: decumulate and store downloaded data files in database. Please make sure database already exists if not using sqlite.
 
-    from pymtattl.download import SqliteDownloader
-    # provide database parameters
-    pm = {'path': 'test',
-          'dbname': 'testdb'}
-    sqlite_downloader = SqliteDownloader(start=141018, end=None, dbparms=pm)
-    # download data files and save to sqlite db
-    sqlite_downloader.download_to_db(path='data', update=False)
-    # write name_keys file to db
-    sqlite_downloader.init_namekeys(path='data', update=False)
+    from pymtattl import Cleaner
+    
+    clean = Cleaner(date_range=None,
+                    input_path='./data/download-20181227160016',
+                    dbstring='postgresql://user:p@ssword@localhost:5432/mta_sample')
+    clean.run()
 
-* Create (if not exists) a SQLite database **testdb.db** under **~/test/** and 3 tables
+* Create 4 tables to save disk space and use end of last week numbers to be used as baseline for current week
+  - `turnstile`: decumulated entry/exit 
+    - columns: *id, device_id, timestamp, description, entry, exit*
+  - `station`: mta staion defined by ca, unit pairs
+      - columns: *id, ca, unit*
+  - `device`: device location in each station
+      - columns: *id, station_id, scp*
+  - `previous`: memorize ending data from previous week, support decumulate accross weekly files
+      - columns: *id, device_id, timestamp, description, entry, exit, file_date*
 
-  - **turnstile**: holds turnstile data
-  - **name_keys**: a matching table to lookup station name given remote and booth
-  - **file_names**: names of data files that are already in **turnstile** table
+* `date_range`: *tuple*, default None
+  - Define the start and end dates of the files to be added to database
+  - Example (yyyy-mm-dd): `("2018-01-01", "2018-02-01")`
+  - If None (default), will add all data files in folder
 
-* `start/end`: *integer or None*
-  - Define the date range to pull data files *(recommend testing with small date ranges, as downloading all files might be slow)*
-  - Example (yymmdd) for 2014-10-18: `141018`
+* `input_path`: *string*
+  - Directory of the downloaded text files to be added to database
 
-* `dbparm`: *dict*
-  - `path`: path to create or find an existing sqlite database file
-  - `dbname`: database file name to create or save to if exists
-
-* `path`: *string*
-  - Local data folder path if data already downloaded
-  - Specify an existing directory or a new folder name to store downloaded text files
-  - Can also choose to directly read from MTA website and write to db, as if there is no local data files
-
-* Returns data folder directory
-
-### Postgres Database
-
-PostgresDownloader: Reformat data either from **local path** or directly downloaded from MTA website and save in a Postgres database
-
-    from pymtattl.download import PostgresDownloader
-    # provide database parameters
-    pm = {'dbname': '',
-          'user': 'a',
-          'password': 'b',
-          'host': 'localhost',
-          'port': '5432'}
-    postgres_downloader = PostgresDownloader(start=141018, end=None, dbparms=pm)
-    # download data files and save to postgres db
-    postgres_downloader.download_to_db(path='data', update=False)
-    # write name_keys file to db
-    postgres_downloader.init_namekeys(path='data', update=False)
-
-* Create (if not exists) a Postgres database and 3 tables
-
-  - **turnstile**: holds turnstile data
-  - **name_keys**: a matching table to lookup station name given remote and booth
-  - **file_names**: names of data files that are already in **turnstile** table
-
-* `start/end`: *integer or None*
-  - Define the date range to pull data files *(recommend testing with small date ranges, as downloading all files might be slow)*
-  - Example (yymmdd) for 2014-10-18: `141018`
-
-* `dbparm`: *dict*
-  - `dbname`: database name to connect, if empty string or remove from the dict, will prompt to ask for new database name to **create**
-  - `user`|`password`|`host`|`port`: parameters to connect to Postgres instance
-
-* `path`: *string*
-  - Local data folder path if data already downloaded
-  - Specify an existing directory or a new folder name to store downloaded text files
-  - Can also choose to directly read from MTA website and write to db, as if there is no local data files
+* `dbstring`: *string*
+  - Database urls used by sqlalchemy
+  - dialect+driver://username:password@host:port/database
+  - postgres: 'postgresql://scott:tiger@localhost/mydatabase'
+  - mysql: 'mysql://scott:tiger@localhost/foo'
+  - sqlite: 'sqlite:///foo.db'
+  - more info: https://docs.sqlalchemy.org/en/latest/core/engines.html#postgresql
 
 ## Caveats
 
-* Some know data issues and these rows will be skipped while building the database
+* Some know data issues and these rows will be skipped and logged while building the database
 
   - In Turnstile_120428.txt, one line with empty ('') exit number
   - In Turnstile_120714.txt, first few lines could not be parsed
-  - It seems recently date strings were reformatted to `mm/dd/yyyy` (03/20/2018)
+  - Date strings were reformatted to `mm/dd/yyyy` (03/20/2018)
 
 ## To-Do
 
-* De-cumulate entry and exit numbers, and store data within selected date range into a new table
+* Batch processing of multiple data files together before decumulate step.
 
-* A Summary table (ie. number of booth per station, average daily station entries/exits, ...) for "cleaned" data table above
+* Append station name to station table.
 
 * More to come...
