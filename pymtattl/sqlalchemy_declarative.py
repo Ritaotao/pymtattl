@@ -1,7 +1,7 @@
 import os
 import sys
 import pandas as pd
-from sqlalchemy import Column, ForeignKey, Integer, String
+from sqlalchemy import Column, ForeignKey, Integer, String, Numeric
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship
 from sqlalchemy import create_engine
@@ -15,13 +15,16 @@ class Station(Base):
     id = Column(Integer, primary_key=True)
     ca = Column(String(250), nullable=False)
     unit = Column(String(250), nullable=False)
+    name = Column(String(250), nullable=True)
+    line = Column(String(250), nullable=True)
+    division = Column(String(250), nullable=True)
+    latitude = Column(Numeric(10, 6), nullable=True)
+    longitude = Column(Numeric(10, 6), nullable=True)
 
 class Device(Base):
     __tablename__ = 'device'
     id = Column(Integer, primary_key=True)
     station_id = Column(Integer, ForeignKey('station.id'))
-    #ca = Column(String(250), nullable=False)
-    #unit = Column(String(250), nullable=False)
     scp = Column(String(250), nullable=False)
 
 class Turnstile(Base):

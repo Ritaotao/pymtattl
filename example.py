@@ -13,6 +13,6 @@ data_path = download.run()
 # sqlite: 'sqlite:///foo.db'
 # (more info could found here: https://docs.sqlalchemy.org/en/latest/core/engines.html#postgresql)
 clean = Cleaner(input_path=data_path,
-                dbstring='postgresql://user:p@ssword@localhost:5432/mta_sample')
+                dbstring='postgresql://user:p@ssword@localhost:5432/mta_sample2')
 clean.run()
 print("Example complete.")
