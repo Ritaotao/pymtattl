@@ -95,18 +95,27 @@ Note 2: be cautious about date range of files need to be appended to the databas
   - sqlite: 'sqlite:///foo.db'
   - more info: https://docs.sqlalchemy.org/en/latest/core/engines.html#postgresql
 
-## Caveats
+## Data Issues
 
-* Some know data issues and these rows will be skipped and logged while building the database
+* Some known data issues, might happen in multiple files and quite manual to detect and remove
 
-  - In Turnstile_120428.txt, one line with empty ('') exit number
-  - In Turnstile_120714.txt, first few lines could not be parsed
+  - In turnstile_120428.txt, one line with empty ('') exit number
+  - In turnstile_120714.txt, first few lines could not be parsed
   - Date strings were reformatted to `mm/dd/yyyy` (03/20/2018)
+  - In turnstile_170204.txt, A025, R023, 01-03-01, 02/01/2017, entry numbers start counting backwards
+  - In turnstile_170909.txt, C020, R233, 00-00-00, 09/02/2017, status switch between REGULAR and RECOVER AUD
+  - In turnstile_170318.txt, PTH03, R522, 00-00-09, 03/11/2017, every second record seems to be correct but every next one could increase by 80K. This seem to happen with smaller numbers as well. In turnstile_171028.txt, PTH07, R550, 00-01-06, 10/21/2017, entries increase and decrease by 8K.
+
+* Incompatible data types and formats were detected, logged, and ignored during Downloading process. The package provides a workaround with other issues related to values:
+
+  - Count backwards: use absolute values after diff method is called
+  - Adjacent values inconsistent, but every second record correct: a second diff is called on values greater than certain threshold (Entry > 7000, Exit > 6000)
+  - Huge values: values still above threshold are dropped
 
 ## To-Do
 
 * Batch processing of multiple data files together before decumulate step.
 
-* Append station name to station table.
+* Append station name to station table. (in pymtattl/utils.py)
 
 * More to come...

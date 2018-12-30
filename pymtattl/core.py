@@ -212,7 +212,7 @@ class Cleaner:
 
     def run(self):
         """execution phase based on parameters"""
-        # get data location
+        # get data paths
         logger = logging.getLogger(self._jobname)
         files = getDataAddress(self._start_date, self._end_date, self._jobname, self.input_path)
         # configure database
@@ -228,12 +228,13 @@ class Cleaner:
                 station, exist1 = get_one_or_create(session, Station, ca=idx[0], unit=idx[1])
                 device, exist2 = get_one_or_create(session, Device, station_id=int(station.id), scp=idx[2])
                 df.loc[idx, 'device_id'] = int(device.id)
-            df = df.reset_index(drop=True) # drop index: ca,unit,scp, keep: device_id, timestamp description, entry, exit
-            # diff step: include last week last record per device_id to perform decumulate operation across weekly files
+            df = df.reset_index(drop=True) # keep only: device_id, timestamp description, entry, exit
+            ## append historical step: 
+            ## include last week last record per device_id to perform decumulate operation
             ## output last row for each device_id
             df_prev_new = df.groupby('device_id').last().reset_index()
             df_prev_new['file_date'] = int_file_date # device_id, timestamp, description, entry, exit, file_date
-            ## get entire last_df from db
+            ## get stored last week records from db and convert to pandas dataframe
             df_prev = data_frame(session.query(Previous), [c.name for c in Previous.__table__.columns]) # id, device_id, description, timestamp, entry, exit, file_date
             logger.info("Sample of Previous table:\n{}".format(df_prev.head(5)))
             if not df_prev.empty:
@@ -241,24 +242,29 @@ class Cleaner:
                 df_prev.drop(['id'], axis=1, inplace=True) # drop primary key
                 df_rest = df_prev.loc[~df_prev['device_id'].isin(df['device_id']), :].copy()
                 df_prev_new = pd.concat([df_prev_new, df_rest], axis=0, sort=False).reset_index(drop=True)
-                ## convert file_date column to datetime since date subtraction is not valid in integer type across years
                 ## select records 1) appeared in last week file 2) has device_id within current week file
                 df_prev['file_date'] =  pd.to_datetime(df_prev['file_date'], format="%y%m%d")
                 df_prev['last_week'] = ((df_prev['file_date'] - pd.to_datetime(int_file_date, format="%y%m%d")).dt.days == -7)
                 df_update = df_prev.loc[(df_prev['last_week']) & (df_prev['device_id'].isin(df['device_id'].unique())), :].copy()
                 df_update.drop(['file_date', 'last_week'], axis=1, inplace=True)
                 df = pd.concat([df, df_update], axis=0, sort=False)
-            ## decumulate step
+            ## decumulate step:
+            # 3 issues: backwards counts -> negative values,
+            #           jump counts -> series of large numbers resulted from diff once,
+            #           device reset -> huge values
+            # a. use absolute values of diff (for backward counts)
+            # b. remove first rows (with NAs) after diff
+            # c. manual search for large number threshold (entry: 7000, exit: 6000), perform a second diff (for jump counts)
+            # d. drop numbers above threshold (for huge values)
             df = df.sort_values(['device_id', 'timestamp']).reset_index(drop=True)
-            df['entry'] = df.groupby('device_id')['entry'].diff()
-            df['exit'] = df.groupby('device_id')['exit'].diff()
-            # might have negative values due to reasons ie. counter reset, etc, set to zero
-            df.loc[df['entry'] < 0, 'entry'] = 0
-            df.loc[df['exit'] < 0, 'exit'] = 0
+            df.loc[:, ['entry', 'exit']] = df.groupby('device_id')['entry', 'exit'].diff().abs()
+            df.dropna(axis=0, how='any', inplace=True)
+            df = splitDiff(df, 7000, 'entry', 'device_id')
+            df = splitDiff(df, 6000, 'exit', 'device_id')
+            df.dropna(axis=0, how='any', inplace=True)
+            df.drop(df[(df['entry'] >= 7000) | (df['exit'] >= 6000)].index, inplace=True)
             logger.info("Sample of df:\n{}".format(df.head()))
-            # remove first rows (with NAs) after diff
-            df.dropna(axis=0, how='any', inplace=True)    
-            ## check out decumulated data and new df_prev
+            ## store decumulated data and new df_prev to db
             df = df.to_dict(orient='records')
             try:
                 session.execute(
@@ -325,3 +331,13 @@ def processRow(filename, cols, i, j, prefix):
         return False
     return tuple(cols[:3] + [timestamp, description, entry, exit])
 
+
+def splitDiff(df, threshold, col, gbcol):
+    """split df by threshold, perform a second groupby.diff on gte portion
+        handle entry and exit seperately to save more "normal" records
+        (data issue: every second record correct, every adjacent record wrong)
+    """
+    df1 = df[df[col] < threshold].copy()
+    df2 = df[df[col] >= threshold].copy()
+    df2[col] = df2.groupby(gbcol)[col].diff().abs()
+    return pd.concat([df1, df2], axis=0).sort_index()

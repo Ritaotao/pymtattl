@@ -1,7 +1,7 @@
 # Download mta turnstile data files from 2018-01-01 to 2018-02-01,
 # write into postgres database (please make sure mta_sample already exists)
 
-from pymtattl import Downloader, Cleaner
+from pymtattl import Downloader, Cleaner, station_mapping
 
 download = Downloader(date_range=("2018-01-01", "2018-02-01"))
 data_path = download.run()
@@ -13,6 +13,9 @@ data_path = download.run()
 # sqlite: 'sqlite:///foo.db'
 # (more info could found here: https://docs.sqlalchemy.org/en/latest/core/engines.html#postgresql)
 clean = Cleaner(input_path=data_path,
-                dbstring='postgresql://user:p@ssword@localhost:5432/mta_sample2')
+                dbstring='postgresql://user:p@ssword@localhost:5432/mta_sample')
 clean.run()
+
+station_mapping(file_path='data/Remote-Booth-Station.xlsx',
+                dbstring='postgresql://user:p@ssword@localhost:5432/mta_sample2')
 print("Example complete.")

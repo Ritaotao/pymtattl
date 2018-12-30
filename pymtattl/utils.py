@@ -1,18 +1,20 @@
 import os
+import sys
 import pandas as pd
-from pymtattl.sqlalchemy_declarative import Station, data_frame
+from .sqlalchemy_declarative import Station, data_frame
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.types import INTEGER
 from sqlalchemy import create_engine
 
-dir_path = os.path.dirname(os.path.realpath(__file__))
 
-
-def station_mapping(dbstring):
-    # read geocoded Remote-Booth-Statio.xlsx file
+def station_mapping(file_path, dbstring):
+    # read geocoded Remote-Booth-Station.xlsx file
     # Thanks to Chris Whong and Mala Hertz for mapping Remote Unit with the Latitude/Longitude
     # repo here: https://github.com/chriswhong/nycturnstiles
-    df_map = pd.read_excel(os.path.join(dir_path, 'Remote-Booth-Station.xlsx'))
+    if not os.path.isfile(file_path):
+        print("Mapping file not found.")
+        sys.exit(1)
+    df_map = pd.read_excel(file_path)
     print(df_map.head())
 
     # connect to db and read in Station table
@@ -60,7 +62,3 @@ def station_mapping(dbstring):
         conn.execute('DROP TABLE temp_table;')
 
     print("Geomapped station table udpated.")
-    
-
-if __name__ == '__main__':
-    station_mapping(dbstring='postgresql://user:p@ssword@localhost:5432/mta_sample')
