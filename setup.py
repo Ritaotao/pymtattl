@@ -7,7 +7,7 @@ def read(fname):
 
 
 setup(name='pymtattl',
-      version='1.1.0',
+      version='1.1.1',
       description='Download and store MTA turnstile data',
       long_description=read('README.md'),
       long_description_content_type="text/markdown",
