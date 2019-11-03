@@ -40,18 +40,21 @@ Note 2: be cautious about date range of files need to be appended to the databas
 
     from pymtattl import Downloader
 
-    download = Downloader(date_range=("2018-01-01", "2018-02-01"),
-                          main_path='./data/',
-                          verbose=10)
-    data_path = download.run()
+    download = Downloader(directory='./data/',
+                          local=True)
+    data_path = download.run(date_range=("2019-01-01", "2019-02-01"), 
+                             verbose=10)
 
 * `date_range`: *tuple*
   - Define the start and end dates *(recommend testing with small date ranges, as downloading all files might be slow)*
   - Example (yyyy-mm-dd): `("2018-01-01", "2018-02-01")`
 
-* `main_path`: *string*, default './data/'
+* `directory`: *string*, default './data/'
   - A directory to store downloaded data files (will be created if dir not exists)
   - Every run creates a new dir `download-yyyymmddhhmmss`, where all data files and log files are nested under
+
+* `local`: *boolean*, default True
+  - Indicate whether local directory or s3 connection
 
 * `verbose`: *int*, default 10
   - Log and print out when every n files are downloaded

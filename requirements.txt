@@ -1,0 +1,12 @@
+beautifulsoup4==4.8.1
+bs4==0.0.1
+certifi==2019.9.11
+lxml==4.4.1
+numpy==1.17.3
+pandas==0.25.3
+python-dateutil==2.8.1
+pytz==2019.3
+six==1.12.0
+soupsieve==1.9.5
+SQLAlchemy==1.3.10
+wincertstore==0.2

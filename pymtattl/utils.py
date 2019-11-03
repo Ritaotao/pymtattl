@@ -1,12 +1,48 @@
 import os
 import sys
 import pandas as pd
+import logging
+from datetime import datetime
+
 from .sqlalchemy_declarative import Station, data_frame
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.types import INTEGER
 from sqlalchemy.orm.exc import NoResultFound
 from sqlalchemy import create_engine
 
+def createLogger(prefix, log_path=None):
+    """create logging instance"""
+    LOGFORMAT = "%(asctime)s [%(threadName)-12.12s] [%(levelname)-5.5s]  %(message)s"
+    logging.basicConfig(level=logging.INFO, format=LOGFORMAT)
+    
+    appLogger = logging.getLogger(prefix)
+    appLogger.addHandler(logging.NullHandler())
+    # write log to file
+    if log_path:
+        fh = logging.FileHandler(log_path)
+        fh.setLevel(logging.INFO)
+        fh.setFormatter(logging.Formatter(LOGFORMAT))
+        appLogger.addHandler(fh)
+    return appLogger
+
+def str2intDate(datetext):
+    """take string date format input and convert to numerics"""
+    return int(datetime.strptime(datetext, '%Y-%m-%d').strftime('%y%m%d'))
+
+def parseDate(name):
+    """return date part (yymmdd) given data url or file name"""
+    return int(name.split('_')[-1].split('.')[0])
+
+def filterUrl(urls, date_range):
+    return [u for u in urls if parseDate(u) >= date_range[0] and parseDate(u) <= date_range[1]]
+
+def createPath(path):
+    if not os.path.isdir(path):
+        try:
+            os.makedirs(path)
+        except Exception as e:
+            raise e
+    return path
 
 def station_mapping(file_path, dbstring):
     # read geocoded Remote-Booth-Station.xlsx file
